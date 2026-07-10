@@ -11,146 +11,6 @@ import os
 from collections import defaultdict
 from logger import Logger
 
-# V1
-def solve_one(args):
-    A, b, s = args
-    m, n = A.shape
-    S = s[:, None]
-    M = S * A
-    c = np.zeros(n+1); c[-1] = -1
-    A_ub = np.hstack([-M, np.ones((m,1))])
-    b_ub = (S.flatten()) * b
-    res = linprog(
-    c, A_ub=A_ub, b_ub=b_ub,
-    bounds=[(-1e6, 1e6)]*n + [(0, 1.0)],   # box x, and cap margin r in [0,1]
-    method="highs"
-    )
-    return (tuple(s), res.success and res.x[-1] > 1e-7)
-
-def brute_force_exact(A, b, workers=8):
-    m, n = A.shape
-    signs = list(product([-1,1], repeat=m))
-    with Pool(workers) as p:
-        results = p.map(solve_one, [(A, b, np.array(s)) for s in signs])
-    return {s: ok for s, ok in results if ok}
-
-# V2
-def brute_force_orthants_torch(A, b, iters=300, lr=0.01, tol=1e-6, device="cpu"):
-    A = torch.as_tensor(A, dtype=torch.float64, device=device)
-    b = torch.as_tensor(b, dtype=torch.float64, device=device)
-    m, n = A.shape
-    G = 2 ** m
-    assert G <= 2**24, "too many orthants for brute force, use the arrangement method"
-
-    # generate all sign vectors as (G, m) tensor of +-1, via bit unpacking
-    bits = ((torch.arange(G, device=device).unsqueeze(1) >> torch.arange(m, device=device)) & 1)
-    S = 1 - 2 * bits.to(torch.float64)          # (G, m), entries in {+1,-1}
-
-    x = torch.zeros(G, n, device=device, dtype=torch.float64, requires_grad=True)
-    opt = torch.optim.Adam([x], lr=lr)
-
-    for _ in tqdm(range(iters)):
-        opt.zero_grad()
-        lin = x @ A.T + b                       # (G, m)
-        loss_per_orthant = torch.relu(-S * lin).sum(dim=1)   # (G,)
-        loss = loss_per_orthant.sum()
-        loss.backward()
-        opt.step()
-
-    with torch.no_grad():
-        lin = x @ A.T + b
-        final_loss = torch.relu(-S * lin).sum(dim=1)
-        feasible_mask = final_loss < tol
-
-    hit_signs = S[feasible_mask]
-    return hit_signs, x.detach()[feasible_mask]
-
-# V3
-def count_orthants(A, b, device=None, chunk=4096, tol=1e-9, return_cells=False):
-    """
-    Count the open orthants of R^m that the image {A x + b : x in R^n} intersects.
- 
-    This equals the number of full-dimensional cells of the hyperplane
-    arrangement { A_i x + b_i = 0 }_{i=1..m} in R^n.
- 
-    Method (fully batched, GPU-friendly): every cell of an essential arrangement
-    (rank A = n) is incident to a vertex = intersection of some n hyperplanes.
-    For each n-subset we solve an n x n system for the vertex, read the signs of
-    the other m-n hyperplanes there, and emit the 2^n local sign combinations on
-    the n tight hyperplanes. Dedup -> exact count. Assumes general position.
- 
-    A: (m, n) float tensor,  b: (m,) float tensor,  with m > n and rank(A) = n.
-    Returns: int count  (and the (K, m) tensor of realized sign vectors if requested).
-    Complexity: O( C(m, n) * 2^n ).
-    """
-    if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-    A = A.to(device, torch.float64)
-    b = b.to(device, torch.float64)
-    m, n = A.shape
-    assert m > n, "need m > n"
- 
-    # all n-subsets -> candidate vertices, shape (V, n)
-    subs = torch.tensor(list(combinations(range(m), n)), device=device, dtype=torch.long)
-    V = subs.shape[0]
-    two_n = 1 << n
- 
-    # local sign grid: (2^n, n) over {-1, +1}, one row per incident cell
-    bits = (torch.arange(two_n, device=device).unsqueeze(1) >> torch.arange(n, device=device)) & 1
-    grid = (bits * 2 - 1).to(torch.int8)                       # (2^n, n)
- 
-    # words needed to bit-pack a length-m sign vector for fast unique (63 bits/word)
-    W = (m + 62) // 63
-    pos = torch.arange(m, device=device)
-    word_of = (pos // 63)                                      # (m,)
-    shift_of = (pos % 63)                                      # (m,)
-    pow2 = (torch.ones(m, dtype=torch.long, device=device) << shift_of)  # (m,)
- 
-    codes = None  # running (K, W) int64 table of unique packed cells
- 
-    for s0 in tqdm(range(0, V, chunk)):
-        idx = subs[s0:s0 + chunk]                              # (c, n)
-        As = A[idx]                                            # (c, n, n)
-        bs = b[idx]                                            # (c, n)
- 
-        det = torch.linalg.det(As)
-        keep = det.abs() > tol                                 # drop singular n-subsets
-        idx, As, bs = idx[keep], As[keep], bs[keep]
-        c = idx.shape[0]
-        if c == 0:
-            continue
- 
-        v = torch.linalg.solve(As, -bs.unsqueeze(-1)).squeeze(-1)   # (c, n) vertices
-        Y = v @ A.T + b                                             # (c, m) all hyperplanes @ vertex
-        S = torch.sign(Y).to(torch.int8)                            # far coords signed; tight ~0
- 
-        # expand each vertex into its 2^n incident cells and override tight coords
-        cell = S.unsqueeze(1).repeat(1, two_n, 1).reshape(c * two_n, m)     # (c*2^n, m)
-        rows = torch.arange(c, device=device).repeat_interleave(two_n)      # (c*2^n,)
-        cols = idx[rows]                                                    # (c*2^n, n)
-        vals = grid.unsqueeze(0).expand(c, -1, -1).reshape(c * two_n, n)    # (c*2^n, n)
-        cell.scatter_(1, cols, vals)                                        # write local signs
- 
-        # bit-pack (sign > 0) -> (N, W) int64, then dedup this chunk
-        posbits = (cell > 0).to(torch.long)                                # (N, m)
-        packed = torch.zeros(cell.shape[0], W, dtype=torch.long, device=device)
-        packed.index_add_(1, word_of, posbits * pow2)                      # (N, W)
-        packed = torch.unique(packed, dim=0)
- 
-        codes = packed if codes is None else torch.unique(
-            torch.cat([codes, packed], dim=0), dim=0)
- 
-    count = 0 if codes is None else codes.shape[0]
-    if not return_cells:
-        return count
- 
-    # unpack codes back to (K, m) sign vectors if the caller wants them
-    take = ((codes[:, word_of] >> shift_of) & 1)
-    sign_vectors = (take * 2 - 1).to(torch.int8)
-    return count, sign_vectors
-
-
-
 # ----------------------------------------------------------------------
 # 1. Enumerate the realized activation patterns (linear regions).
 #    Reuses the vertex-enumeration idea: each region <-> a sign vector of
@@ -261,7 +121,7 @@ def find_supersets(tuples):
                     results.append(cand)
     return results
 
-def process_func(indexs, An, bn, Bn, P, Mn, cn, w, verbose=True):
+def distinct_colapse_process(indexs, An, bn, Bn, P, Mn, cn, w, verbose=True):
     i,j = indexs
     m, n = An.shape
     hit, z = distinct_collapse(An, bn, Bn, P[i], P[j], Mn[i], Mn[j], cn[i], cn[j], w)
@@ -392,7 +252,7 @@ def find_kway_collisions(A, b, B, logger, k=3, device=None, max_hits=3, verbose=
 
         # 1) pairwise collision graph (prune)
         adj = np.zeros((R, R), dtype=bool)
-        hits = process_map(partial(process_func, An=An, bn=bn, Bn=Bn, P=P, Mn=Mn, cn=cn, w=w, verbose=False), 
+        hits = process_map(partial(distinct_colapse_process, An=An, bn=bn, Bn=Bn, P=P, Mn=Mn, cn=cn, w=w, verbose=False), 
                         list(combinations(range(R), 2)), 
                         max_workers=12, 
                         chunksize=2048
@@ -482,14 +342,13 @@ def is_injective(A, b, B, device=None, verbose=True):
     rng = np.random.default_rng(0)
     w = rng.standard_normal(m)
 
-    hits = process_map(partial(process_func, An=An, bn=bn, Bn=Bn, P=P, Mn=Mn, cn=cn, w=w), 
+    hits = process_map(partial(distinct_colapse_process, An=An, bn=bn, Bn=Bn, P=P, Mn=Mn, cn=cn, w=w), 
                        list(combinations(range(R), 2)), 
                        max_workers=32, 
                        chunksize=512
     )
     hits = list([hit for hit in hits if hit is not None]) 
     print(len(hits))
-
 
 def matrix_from_kernel(K, tol=1e-10):
     # Check K has full column rank

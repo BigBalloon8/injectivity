@@ -221,7 +221,7 @@ def find_kway_collisions(A, b, B, logger, k=3, device=None, max_hits=3, verbose=
         device = "cuda" if torch.cuda.is_available() else "cpu"
     file_loaded = False
     if os.path.exists("cache.pt"):
-        save_data = torch.load("cache.pt", weights_only=False)
+        save_data = torch.load("cache.pt", weights_only=False, map_location=torch.device(device))
         if torch.all(A.cpu()==save_data["A"].cpu()) and torch.all(B.cpu() == save_data["B"].cpu()) and  torch.all(b.cpu()==save_data["b"].cpu()):
             A = A.to(device); b = b.to(device); B = B.to(device)
             patterns = save_data["patterns"]
@@ -250,12 +250,12 @@ def find_kway_collisions(A, b, B, logger, k=3, device=None, max_hits=3, verbose=
         rng = np.random.default_rng(0)
         w = rng.standard_normal(m)
 
-        # 1) pairwise collision graph (prune)
+        # 1. pairwise collision graph (prune)
         adj = np.zeros((R, R), dtype=bool)
         hits = process_map(partial(distinct_colapse_process, An=An, bn=bn, Bn=Bn, P=P, Mn=Mn, cn=cn, w=w, verbose=False), 
                         list(combinations(range(R), 2)), 
-                        max_workers=12, 
-                        chunksize=2048
+                        max_workers=24, 
+                        chunksize=16*32
         )
 
         save_data = {
@@ -278,14 +278,14 @@ def find_kway_collisions(A, b, B, logger, k=3, device=None, max_hits=3, verbose=
         print(f"regions={R}, colliding pairs={n_edges} of {R*(R-1)//2}")
     logger.log(f"regions={R}, colliding pairs={n_edges} of {R*(R-1)//2}")
 
-    # 2) k-cliques of the graph -> joint LP
+    # 2. k-cliques of the graph -> joint LP
     hits = [(h[0],h[1]) for h in hits if h is not None]
     logger.log(f"{len(hits[0])}: {len(hits)}")
     while len(hits) > 0:
         tuples = find_supersets(hits)
         hits = process_map(partial(kway_collapse_process, An=An, bn=bn, P=P, Mn=Mn, cn=cn, w=w),
                         tuples,
-                        max_workers=12, 
+                        max_workers=os.cpu_count(), 
                         chunksize=12*16
                 )
         hits = [h for h in hits if h[0] is not None]
@@ -344,8 +344,8 @@ def is_injective(A, b, B, device=None, verbose=True):
 
     hits = process_map(partial(distinct_colapse_process, An=An, bn=bn, Bn=Bn, P=P, Mn=Mn, cn=cn, w=w), 
                        list(combinations(range(R), 2)), 
-                       max_workers=32, 
-                       chunksize=512
+                       max_workers=16, 
+                       chunksize=1024
     )
     hits = list([hit for hit in hits if hit is not None]) 
     print(len(hits))
@@ -363,6 +363,10 @@ def matrix_from_kernel(K, tol=1e-10):
 def main():
     seed=2
     torch.manual_seed(seed)
+    if not torch.cuda.is_available():
+        map_loc = torch.device("cpu")
+    else:
+        map_loc = None
     # m, n = 6, 2
     # A = torch.randn(m, n, dtype=torch.float64)
     # b = torch.randn(m, dtype=torch.float64)
@@ -382,27 +386,33 @@ def main():
         up_proj = torch.randn(16,4)
         up_proj_b = torch.randn(16)
         down_proj = torch.randn(4,16)
-        log_file = f"/home/crae/projects/injectivity/logs/analysis_random.log"
+        log_file = f"./logs/analysis_random.log"
         logger = Logger(f"Analysis({seed})", log_file)
     else:
-        model_dir = "/home/crae/projects/injectivity/models/"
-        model_file = "kv_{'n_keys': 32}_4_16_1_32768.pt"
+        model_dir = "./models/"
+        model_file = "modular_{'p': 7, 'op': 'add'}_4_16_1.pt"
         filename = model_dir + model_file
-        log_file = f"/home/crae/projects/injectivity/logs/analysis_{model_file}.log"
+        log_file = f"./logs/analysis_{model_file}.log"
         logger = Logger("Analysis", log_file)
-        state_dict = torch.load(filename)
+        state_dict = torch.load(filename, map_location=map_loc)
         if any(["layers.1" in k for k in state_dict.keys()]):
             idx = input(f"Select Layer (0-{len(state_dict["layers"])-1}): ")
         else:
             idx = 0
         
-        up_proj = state_dict[f"_orig_mod.layers.{idx}.ffn.l1.weight"]
-        up_proj_b = state_dict[f"_orig_mod.layers.{idx}.ffn.l1.bias"]
-        down_proj = state_dict[f"_orig_mod.layers.{idx}.ffn.l2.weight"]
+        try: # compiled
+            up_proj = state_dict[f"_orig_mod.layers.{idx}.ffn.l1.weight"]
+            up_proj_b = state_dict[f"_orig_mod.layers.{idx}.ffn.l1.bias"]
+            down_proj = state_dict[f"_orig_mod.layers.{idx}.ffn.l2.weight"]
+        except KeyError: # not compiled
+            up_proj = state_dict[f"layers.{idx}.ffn.l1.weight"]
+            up_proj_b = state_dict[f"layers.{idx}.ffn.l1.bias"]
+            down_proj = state_dict[f"layers.{idx}.ffn.l2.weight"]
+    
     # down_proj = torch.tensor(matrix_from_kernel(null_space(up_proj.T)))
 
 
-    find_kway_collisions(up_proj, up_proj_b, down_proj, logger, device="cuda")
+    find_kway_collisions(up_proj, up_proj_b, down_proj, logger)
     #inj, cert = is_injective(up_proj, up_proj_b, down_proj, device="cuda")
     # print(f"injective on ReLU range: {inj}")
     # if not inj:

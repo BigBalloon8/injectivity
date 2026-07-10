@@ -23,17 +23,12 @@ class Logger:
 
         if filename:
             # if the default check that it exists
-            if filename == "./orbital_motion.log":
-                if os.path.isfile(filename):
-                    file_handler = logging.FileHandler(filename)
-                    file_handler.setFormatter(formatter)
-                    self.logger.addHandler(file_handler)
-                else:
-                    print(f"Warning: log file '{filename}' does not exists")
-            else:
-                file_handler = logging.FileHandler(filename)
-                file_handler.setFormatter(formatter)
-                self.logger.addHandler(file_handler)
+            if not os.path.isfile(filename):  
+                with open(filename, "w") as f:
+                    pass
+            file_handler = logging.FileHandler(filename)
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
 
         # Instead of print(msg) adding this handler automatically prints the message with the correct format
         stdout_handler = logging.StreamHandler(stream=sys.stdout)

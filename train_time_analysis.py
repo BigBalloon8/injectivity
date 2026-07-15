@@ -57,7 +57,7 @@ def main():
         n_layers=n_layers,
         vocab_size=meta.vocab_size
     )
-    file_name = lambda folder: f"/home/crae/projects/injectivity/{folder}/{task}_{kwargs.__repr__()}_{dim}_{h_dim}_{n_layers}_{num_epochs}"
+    file_name = lambda folder: f"{folder}/{task}_{kwargs.__repr__()}_{dim}_{h_dim}_{n_layers}_{num_epochs}"
     logger = Logger(task, f"{file_name("logs")}.log")
 
     #model = torch.compile(model).to(device)
@@ -82,6 +82,7 @@ def main():
             down_proj = model.layers[0].ffn.l2.weight
             with torch.no_grad():
                 pairs_collapsed = find_kway_collisions(up_proj.detach(), up_proj_b.detach(), down_proj.detach(), logger, pairs=True, cache=False)
+            logger.log(f"Loss at Epoch {epoch+1}: {loss.mean().item():.5f}")
             logger.log(f"Accuracy at Epoch {epoch+1}: {acc:.2%}")
             logger.log(f"Num Collapsed pairs {epoch+1}: {pairs_collapsed}")
 

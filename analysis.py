@@ -10,6 +10,11 @@ from functools import partial
 import os
 from collections import defaultdict
 from logger import Logger
+from functools import partial
+import random
+from math import comb
+
+from cuopt_linprog import cuopt_batch_linprog
 
 # ----------------------------------------------------------------------
 # 1. Enumerate the realized activation patterns (linear regions).
@@ -60,7 +65,6 @@ def region_maps(A, b, B, patterns):
     within_ok = (rank_M == rank_DA)                      # (R,) bool
     return M, c, DA, within_ok
 
-
 # ----------------------------------------------------------------------
 # 3. Between-region LP: does a DISTINCT collapse exist for a pair (r, r')?
 #    vars z = [x, x'] in R^{2n}.
@@ -72,11 +76,11 @@ def region_maps(A, b, B, patterns):
 # ----------------------------------------------------------------------
 def distinct_collapse(A, b, B, sig_r, sig_p, M_r, M_p, c_r, c_p, w, eps=1e-6, cap=10.0):
     m, n = A.shape
-    Sr = np.diag(sig_r); Sp = np.diag(sig_p)
+    #Sr = np.diag(sig_r); Sp = np.diag(sig_p)
     # inequalities (region membership)
-    A_ub = np.block([[-Sr @ A, np.zeros((m, n))],
-                     [np.zeros((m, n)), -Sp @ A]])
-    b_ub = np.concatenate([Sr @ b, Sp @ b])
+    A_ub = np.block([[-np.expand_dims(sig_r,1) * A, np.zeros((m, n))],
+                     [np.zeros((m, n)), -np.expand_dims(sig_p,1) * A]])
+    b_ub = np.concatenate([sig_r * b, sig_p * b])
     # equalities (collapse)
     A_eq = np.hstack([M_r, -M_p])
     b_eq = c_p - c_r
@@ -87,7 +91,7 @@ def distinct_collapse(A, b, B, sig_r, sig_p, M_r, M_p, c_r, c_p, w, eps=1e-6, ca
     # box the objective so the LP stays bounded:  |g.z| <= cap
     A_ub2 = np.vstack([A_ub, g, -g])
     b_ub2 = np.concatenate([b_ub, [cap, cap]])
-    bnds = [(None, None)] * (2 * n)
+    bnds = [(None, None)] * (2*n)
     # LP1: maximize g.z  ->  t_max = max + k
     r1 = linprog(-g, A_ub=A_ub2, b_ub=b_ub2, A_eq=A_eq, b_eq=b_eq, bounds=bnds, method="highs")
     if r1.success and (-r1.fun + k) > eps:
@@ -97,6 +101,23 @@ def distinct_collapse(A, b, B, sig_r, sig_p, M_r, M_p, c_r, c_p, w, eps=1e-6, ca
     if r2.success and (r2.fun + k) < -eps:
         return True, r2.x
     return False, None
+
+
+@partial(torch.vmap, in_dims=(None, None, 0, 0, 0, 0, 0, 0, None, None))
+def batch_inputs(A, b, sig_r, sig_p, M_r, M_p, c_r, c_p, w, cap):
+    A_ub = torch.block_diag(-sig_r.unsqueeze(1)*A, -sig_p.unsqueeze(1)*A)
+    b_ub = torch.concat([sig_r * b, sig_p * b])
+    
+    A_eq = torch.hstack([M_r, -M_p])
+    b_eq = c_p - c_r
+    Dr = (sig_r > 0).to(float); Dp = (sig_p > 0).to(float)
+    g = torch.concatenate([w * Dr @ A, -(w * Dp) @ A])      # length 2n
+    k = w @ (Dr * b) - w @ (Dp * b)
+    
+    A_ub2 = torch.vstack([A_ub, g, -g])
+    b_ub2 = torch.concatenate([b_ub, cap]) 
+    return g, A_ub2, b_ub2, A_eq, b_eq, k
+
 
 def find_supersets(tuples):
     if not tuples:
@@ -137,6 +158,8 @@ def distinct_colapse_process(indexs, An, bn, Bn, P, Mn, cn, w, verbose=True):
             print(Bn@(np.maximum(An@z[:n] + bn, 0)), "\n",Bn@(np.maximum(An@z[n:] + bn, 0)))
             print("")
         return (i,j,z)
+
+
 
 def kway_collapse_process(tup, An, bn, P, Mn, cn, w):
     ok, xs = kway_collapse(An, bn,
@@ -216,11 +239,11 @@ def kway_collapse(A, b, sigs, Ms, cs, w, eps=1e-6, cap=10.0):
 
 
 
-def find_kway_collisions(A, b, B, logger, k=3, device=None, max_hits=3, verbose=True):
+def find_kway_collisions(A, b, B, logger, alpha_check=0.1, device=None, verbose=True, pairs=False, cache=True):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     file_loaded = False
-    if os.path.exists("cache.pt"):
+    if os.path.exists("cache.pt") and cache:
         save_data = torch.load("cache.pt", weights_only=False)
         if torch.all(A.cpu()==save_data["A"].cpu()) and torch.all(B.cpu() == save_data["B"].cpu()) and  torch.all(b.cpu()==save_data["b"].cpu()):
             A = A.to(device); b = b.to(device); B = B.to(device)
@@ -236,7 +259,7 @@ def find_kway_collisions(A, b, B, logger, k=3, device=None, max_hits=3, verbose=
             adj = np.zeros((R, R), dtype=bool)
             file_loaded=True
 
-    if not file_loaded:
+    if not file_loaded or not cache:
         A = A.to(device); b = b.to(device); B = B.to(device)
         m, n = A.shape
 
@@ -253,7 +276,7 @@ def find_kway_collisions(A, b, B, logger, k=3, device=None, max_hits=3, verbose=
         # 1) pairwise collision graph (prune)
         adj = np.zeros((R, R), dtype=bool)
         hits = process_map(partial(distinct_colapse_process, An=An, bn=bn, Bn=Bn, P=P, Mn=Mn, cn=cn, w=w, verbose=False), 
-                        list(combinations(range(R), 2)), 
+                        random.sample(list(combinations(range(R), 2)), k=int(alpha_check*comb(R,2))), 
                         max_workers=12, 
                         chunksize=2048
         )
@@ -267,6 +290,10 @@ def find_kway_collisions(A, b, B, logger, k=3, device=None, max_hits=3, verbose=
             "w": w
         }
         torch.save(save_data, "cache.pt")
+    
+    if pairs: 
+        hits = [(h[0],h[1]) for h in hits if h is not None]
+        return len(hits)
 
     for hit in hits:
         if hit is not None:
@@ -321,6 +348,7 @@ def verify(A, b, B, xs, tol=1e-8):
 def is_injective(A, b, B, device=None, verbose=True):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
+    A = A.to(float); b = b.to(float); B = B.to(float)
     A = A.to(device); b = b.to(device); B = B.to(device)
     m, n = A.shape
 
@@ -341,9 +369,21 @@ def is_injective(A, b, B, device=None, verbose=True):
 
     rng = np.random.default_rng(0)
     w = rng.standard_normal(m)
+    
+    pairs = torch.tensor(list(combinations(range(R), 2)))
+    print(pairs.shape)
+    chunk_size = 1024*8
+    wt = torch.tensor(w).to(device)
+    cap = torch.tensor([10, 10]).to(float).to(device)
+    for i in tqdm(range(0, pairs.shape[0], chunk_size)):
+        rs = pairs[i:i + chunk_size, 0]
+        ps = pairs[i:i + chunk_size, 1]
+        g, A_ub2, b_ub2, A_eq, b_eq, k = batch_inputs(A, b, patterns[rs], patterns[ps], M[rs], M[ps], c[rs], c[ps], wt, cap)
+        cuopt_batch_linprog(g, A_ub2, b_ub2, A_eq, b_eq, method="dual_simplex", mode="stacked")
+        
 
     hits = process_map(partial(distinct_colapse_process, An=An, bn=bn, Bn=Bn, P=P, Mn=Mn, cn=cn, w=w), 
-                       list(combinations(range(R), 2)), 
+                       random.sample(list(combinations(range(R), 2)), k=int(R*0.1)), 
                        max_workers=32, 
                        chunksize=512
     )
@@ -386,21 +426,23 @@ def main():
         logger = Logger(f"Analysis({seed})", log_file)
     else:
         model_dir = "/home/crae/projects/injectivity/models/"
-        model_file = "kv_{'n_keys': 32}_4_16_1_32768.pt"
+        model_file = "kv_{'n_keys': 32}_4_16_1.pt"
         filename = model_dir + model_file
         log_file = f"/home/crae/projects/injectivity/logs/analysis_{model_file}.log"
         logger = Logger("Analysis", log_file)
         state_dict = torch.load(filename)
         if any(["layers.1" in k for k in state_dict.keys()]):
-            idx = input(f"Select Layer (0-{len(state_dict["layers"])-1}): ")
+            max_layer = max([i for i in range(100) if any([f"layers.{i}" in k for k in state_dict.keys()])])
+            idx = int(input(f"Select Layer (0-{max_layer}): "))
         else:
             idx = 0
-        
         up_proj = state_dict[f"_orig_mod.layers.{idx}.ffn.l1.weight"]
         up_proj_b = state_dict[f"_orig_mod.layers.{idx}.ffn.l1.bias"]
         down_proj = state_dict[f"_orig_mod.layers.{idx}.ffn.l2.weight"]
+        print(up_proj)
     # down_proj = torch.tensor(matrix_from_kernel(null_space(up_proj.T)))
 
+    # is_injective(up_proj, up_proj_b, down_proj, device="cuda")
 
     find_kway_collisions(up_proj, up_proj_b, down_proj, logger, device="cuda")
     #inj, cert = is_injective(up_proj, up_proj_b, down_proj, device="cuda")

@@ -151,6 +151,34 @@ def make_kv(n_keys=512, n_values=None, train_frac=1.0, batch_size=None, seed=0):
                        {"n_keys": n_keys, "n_values": n_values})
     return tr, te, meta
 
+def make_kv_seq(n_keys=512, n_values=None, seq_len=3, train_frac=1.0, batch_size=None, seed=0):
+    """A fixed table of random key -> value pairs. Sequence is just [key].
+
+    Values are random, so there is NOTHING to generalize to -- this measures
+    raw storage. Keep train_frac=1.0 and read TRAIN accuracy as the fraction
+    of pairs memorized. Sweep n_keys against your d_mlp to trace a capacity
+    curve (MLPs act as key-value memories, so capacity scales with d_mlp).
+
+    seq_len is 3, so the single position attends only to itself: this is a
+    pure embed -> MLP -> unembed test with attention factored out entirely.
+    """
+    set_seed(seed)
+    if n_values is None:
+        n_values = n_keys
+
+    g = torch.Generator().manual_seed(seed)
+    keys = torch.randint(0, n_values, (n_keys, 3), generator=g)
+    values = torch.randint(0, n_values, (n_keys,), generator=g)
+
+    x = keys
+    y = values
+    vocab = max(n_keys, n_values)
+
+    tr, te, ntr, nte = _make_loaders(x, y, train_frac, batch_size, seed)
+    meta = DatasetMeta("kv", vocab, seq_len, seq_len-1, ntr, nte,
+                       {"n_keys": n_keys, "n_values": n_values})
+    return tr, te, meta
+
 
 # --------------------------------------------------------------------------- #
 # Task 3: boolean functions  (per-token nonlinear computation)
@@ -198,7 +226,7 @@ def make_boolean(n_bits=8, fn="parity", train_frac=0.7, batch_size=None, seed=0)
 # --------------------------------------------------------------------------- #
 # Dispatcher
 # --------------------------------------------------------------------------- #
-_TASKS = {"modular": make_modular, "kv": make_kv, "boolean": make_boolean}
+_TASKS = {"modular": make_modular, "kv": make_kv, "boolean": make_boolean, "kv_seq": make_kv_seq}
 
 
 def make_dataset(task="modular", **kwargs) -> Tuple[DataLoader, DataLoader, DatasetMeta]:

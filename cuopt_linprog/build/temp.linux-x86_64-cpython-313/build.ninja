@@ -1,0 +1,29 @@
+ninja_required_version = 1.3
+cxx = c++
+
+cflags = -pthread -B /home/crae/miniconda3/shared/python_compiler_compat -fno-strict-overflow -Wsign-compare -DNDEBUG -O2 -Wall -fPIC -O2 -isystem /home/crae/miniconda3/include -fPIC -O2 -isystem /home/crae/miniconda3/include -fPIC -I/home/crae/miniconda3/include -I/home/crae/miniconda3/lib/python3.13/site-packages/torch/include -I/home/crae/miniconda3/lib/python3.13/site-packages/torch/include/torch/csrc/api/include -I/home/crae/miniconda3/include/python3.13 -c
+post_cflags = -O2 -DTORCH_API_INCLUDE_EXTENSION_H -DTORCH_EXTENSION_NAME=cuopt_lp_op -std=c++17
+cuda_dlink_post_cflags = 
+sycl_dlink_post_cflags = 
+ldflags = 
+
+rule compile
+  command = $cxx -MMD -MF $out.d $cflags -c $in -o $out $post_cflags
+  depfile = $out.d
+  deps = gcc
+
+
+
+
+
+
+
+build /home/crae/projects/injectivity/lin_prog/build/temp.linux-x86_64-cpython-313/cuopt_lp_op.o: compile /home/crae/projects/injectivity/lin_prog/cuopt_lp_op.cpp
+
+
+
+
+
+
+
+

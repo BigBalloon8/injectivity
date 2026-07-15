@@ -4,6 +4,7 @@ from tqdm import tqdm
 from data import make_dataset
 from toy_model import Transformer
 from logger import Logger
+from analysis import find_kway_collisions
 
 @torch.no_grad()
 def accuracy(model, loader, meta, device):
@@ -47,7 +48,7 @@ def main():
 
     dim=4
     h_dim=16
-    n_layers=2
+    n_layers=1
 
     model = Transformer(
         dim= dim,
@@ -59,7 +60,7 @@ def main():
     file_name = lambda folder: f"/home/crae/projects/injectivity/{folder}/{task}_{kwargs.__repr__()}_{dim}_{h_dim}_{n_layers}_{num_epochs}"
     logger = Logger(task, f"{file_name("logs")}.log")
 
-    model = torch.compile(model).to(device)
+    #model = torch.compile(model).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1.0)
 
     for epoch in tqdm(range(num_epochs)):
@@ -71,13 +72,20 @@ def main():
             loss.backward()
             opt.step()
             opt.zero_grad() 
-        if task in ("kv", "kv_seq"):
-            acc = accuracy(model, train_loader, meta, device)
-        else:
-            acc = accuracy(model, test_loader, meta, device)
         if epoch % 64==0: 
-            logger.log(f"Accuracy at Epoch {epoch}: {acc:.2%}") 
-            
+            if task in ("kv", "kv_seq"):
+                acc = accuracy(model, train_loader, meta, device)
+            else:
+                acc = accuracy(model, test_loader, meta, device)
+            up_proj = model.layers[0].ffn.l1.weight
+            up_proj_b = model.layers[0].ffn.l1.bias
+            down_proj = model.layers[0].ffn.l2.weight
+            with torch.no_grad():
+                pairs_collapsed = find_kway_collisions(up_proj.detach(), up_proj_b.detach(), down_proj.detach(), logger, pairs=True, cache=False)
+            logger.log(f"Accuracy at Epoch {epoch+1}: {acc:.2%}")
+            logger.log(f"Num Collapsed pairs {epoch+1}: {pairs_collapsed}")
+
+
 
     # Checkpoint
     torch.save(model.state_dict(), f"{file_name("models")}.pt")

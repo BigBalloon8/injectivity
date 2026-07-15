@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: cuopt-lp-op
+Version: 0.1.0
+Summary: PyTorch custom op wrapping NVIDIA cuOpt's LP solver
+Dynamic: summary

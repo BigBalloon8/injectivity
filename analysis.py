@@ -254,7 +254,7 @@ def find_kway_collisions(A, b, B, logger, k=3, device=None, max_hits=3, verbose=
         adj = np.zeros((R, R), dtype=bool)
         hits = process_map(partial(distinct_colapse_process, An=An, bn=bn, Bn=Bn, P=P, Mn=Mn, cn=cn, w=w, verbose=False), 
                         list(combinations(range(R), 2)), 
-                        max_workers=24, 
+                        max_workers=8, 
                         chunksize=16*32
         )
 
@@ -285,10 +285,10 @@ def find_kway_collisions(A, b, B, logger, k=3, device=None, max_hits=3, verbose=
         tuples = find_supersets(hits)
         hits = process_map(partial(kway_collapse_process, An=An, bn=bn, P=P, Mn=Mn, cn=cn, w=w),
                         tuples,
-                        max_workers=os.cpu_count(), 
+                        max_workers=8, 
                         chunksize=12*16
                 )
-        hits = [h for h in hits if h[0] is not None]
+        hits = [h for h in hits if h is not None]
         print(f"{len(hits[0])}: {len(hits)}")
         logger.log(f"{len(hits[0])}: {len(hits)}")
         break
@@ -361,7 +361,7 @@ def matrix_from_kernel(K, tol=1e-10):
 
 
 def main():
-    seed=2
+    seed=4
     torch.manual_seed(seed)
     if not torch.cuda.is_available():
         map_loc = torch.device("cpu")
@@ -381,16 +381,16 @@ def main():
     #         spread, dmin = verify(A, b, B, xs)
     #         print(f"  witness on {tup}: max image spread = {spread:.2e}, "
     #               f"min pairwise ||y_i - y_j|| = {dmin:.3f}")
-    random = False
+    random = True
     if random:
-        up_proj = torch.randn(16,4)
+        up_proj = torch.randn(16, 4)
         up_proj_b = torch.randn(16)
         down_proj = torch.randn(4,16)
         log_file = f"./logs/analysis_random.log"
         logger = Logger(f"Analysis({seed})", log_file)
     else:
         model_dir = "./models/"
-        model_file = "modular_{'p': 7, 'op': 'add'}_4_16_1.pt"
+        model_file = "modular_{'p': 29, 'op': 'add'}_4_16.pt"
         filename = model_dir + model_file
         log_file = f"./logs/analysis_{model_file}.log"
         logger = Logger("Analysis", log_file)

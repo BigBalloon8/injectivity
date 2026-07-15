@@ -243,7 +243,7 @@ def find_kway_collisions(A, b, B, logger, alpha_check=0.1, device=None, verbose=
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     file_loaded = False
-    if os.path.exists("cache.pt"):
+    if os.path.exists("cache.pt") and cache:
         save_data = torch.load("cache.pt", weights_only=False, map_location=torch.device(device))
         if torch.all(A.cpu()==save_data["A"].cpu()) and torch.all(B.cpu() == save_data["B"].cpu()) and  torch.all(b.cpu()==save_data["b"].cpu()):
             A = A.to(device); b = b.to(device); B = B.to(device)
@@ -276,7 +276,7 @@ def find_kway_collisions(A, b, B, logger, alpha_check=0.1, device=None, verbose=
         # 1. pairwise collision graph (prune)
         adj = np.zeros((R, R), dtype=bool)
         hits = process_map(partial(distinct_colapse_process, An=An, bn=bn, Bn=Bn, P=P, Mn=Mn, cn=cn, w=w, verbose=False), 
-                        list(combinations(range(R), 2)), 
+                        random.sample(list(combinations(range(R), 2)), k=int(alpha_check*comb(R, 2))), 
                         max_workers=24, 
                         chunksize=16*32
         )

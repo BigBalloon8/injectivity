@@ -1,10 +1,11 @@
 import torch
 from tqdm import tqdm
+from scipy.linalg import null_space
 
 from data import make_dataset
 from toy_model import Transformer
 from logger import Logger
-from analysis import find_kway_collisions
+from analysis import find_kway_collisions, matrix_from_kernel
 
 @torch.no_grad()
 def accuracy(model, loader, meta, device):
@@ -20,6 +21,7 @@ def accuracy(model, loader, meta, device):
 
 def main():
     task = "kv"
+    torch.manual_seed(2027)
 
     if task == "modular":  # mlp >= 64
         kwargs = {
@@ -28,7 +30,7 @@ def main():
         }
     elif task == "kv":  # mlp >= 2/4x n_keys
         kwargs = {
-            "n_keys": 256  # 32
+            "n_keys": 128  # 32
         }
     elif task == "kv_seq":
         kwargs = {
@@ -41,14 +43,15 @@ def main():
     
     train_loader, test_loader, meta = make_dataset(task, **kwargs)
 
-    print(train_loader.batch_size)
+    print(len(train_loader))
 
-    num_epochs = 2**15
+    num_epochs = 2**12
     device = "cpu"
 
     dim=4
     h_dim=16
     n_layers=1
+    low_colapse_init=True
 
     model = Transformer(
         dim= dim,
@@ -57,7 +60,14 @@ def main():
         n_layers=n_layers,
         vocab_size=meta.vocab_size
     )
-    file_name = lambda folder: f"{folder}/{task}_{kwargs.__repr__()}_{dim}_{h_dim}_{n_layers}_{num_epochs}"
+    if low_colapse_init:
+        with torch.no_grad():
+            up_proj = model.layers[0].ffn.l1.weight
+            orth = up_proj.T*0.5 # this keeps kaiming uniform distribution
+            model.layers[0].ffn.l2.weight = torch.nn.Parameter(orth)
+            
+    
+    file_name = lambda folder: f"{folder}/{task}_tta_{kwargs.__repr__()}_{dim}_{h_dim}_{n_layers}_{low_colapse_init}_{num_epochs}"
     logger = Logger(task, f"{file_name("logs")}.log")
 
     #model = torch.compile(model).to(device)
@@ -81,7 +91,7 @@ def main():
             up_proj_b = model.layers[0].ffn.l1.bias
             down_proj = model.layers[0].ffn.l2.weight
             with torch.no_grad():
-                pairs_collapsed = find_kway_collisions(up_proj.detach(), up_proj_b.detach(), down_proj.detach(), logger, pairs=True, cache=False)
+               pairs_collapsed = find_kway_collisions(up_proj.detach(), up_proj_b.detach(), down_proj.detach(), logger, pairs=True, cache=False)
             logger.log(f"Loss at Epoch {epoch+1}: {loss.mean().item():.5f}")
             logger.log(f"Accuracy at Epoch {epoch+1}: {acc:.2%}")
             logger.log(f"Num Collapsed pairs {epoch+1}: {pairs_collapsed}")

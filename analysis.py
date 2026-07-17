@@ -450,7 +450,7 @@ def main():
             up_proj_b = state_dict[f"layers.{idx}.ffn.l1.bias"]
             down_proj = state_dict[f"layers.{idx}.ffn.l2.weight"]
     
-    # down_proj = torch.tensor(matrix_from_kernel(null_space(up_proj.T)))
+    down_proj = 2*up_proj.T 
 
     # is_injective(up_proj, up_proj_b, down_proj, device="cuda")
 

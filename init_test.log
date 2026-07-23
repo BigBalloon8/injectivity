@@ -1,15 +1,3 @@
-2026-07-16 21:30:56|init_test|Max Acc Rand: u=41.41%,  std=0.00%
-2026-07-16 21:30:56|init_test|Max Acc Smart: u=48.83%,  std=0.00%
-2026-07-16 21:30:56|init_test|Min Loss Rand: u=2.8121,  std=0.0000
-2026-07-16 21:30:56|init_test|Min Loss Smart: u=2.8166,  std=0.0000
-2026-07-16 21:48:08|init_test|Max Acc Rand: u=43.28%,  std=3.04%
-2026-07-16 21:48:08|init_test|Max Acc Smart: u=44.77%,  std=0.98%
-2026-07-16 21:48:08|init_test|Min Loss Rand: u=2.8067,  std=0.0292
-2026-07-16 21:48:08|init_test|Min Loss Smart: u=2.8000,  std=0.0268
-2026-07-16 22:09:42|init_test|Max Acc Rand: u=44.34%,  std=3.37%
-2026-07-16 22:09:42|init_test|Max Acc Smart: u=45.18%,  std=2.79%
-2026-07-16 22:09:42|init_test|Min Loss Rand: u=2.8030,  std=0.0363
-2026-07-16 22:09:42|init_test|Min Loss Smart: u=2.7979,  std=0.0365
 2026-07-16 22:40:02|init_test|Max Acc Rand: u=43.28%,  std=3.11%
 2026-07-16 22:40:02|init_test|Max Acc Smart: u=43.91%,  std=2.37%
 2026-07-16 22:40:02|init_test|Min Loss Rand: u=2.8055,  std=0.0291

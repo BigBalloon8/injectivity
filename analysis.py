@@ -239,7 +239,7 @@ def kway_collapse(A, b, sigs, Ms, cs, w, eps=1e-6, cap=10.0):
 
 
 
-def find_kway_collisions(A, b, B, logger, alpha_check=0.1, device=None, verbose=True, pairs=False, cache=True):
+def find_kway_collisions(A, b, B, logger=None, alpha_check=0.1, device=None, verbose=True, pairs=False, cache=False):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     file_loaded = False
@@ -278,7 +278,8 @@ def find_kway_collisions(A, b, B, logger, alpha_check=0.1, device=None, verbose=
         hits = process_map(partial(distinct_colapse_process, An=An, bn=bn, Bn=Bn, P=P, Mn=Mn, cn=cn, w=w, verbose=False), 
                         random.sample(list(combinations(range(R), 2)), k=int(alpha_check*comb(R, 2))), 
                         max_workers=8, 
-                        chunksize=16*32
+                        chunksize=16*32,
+                        disable = not verbose
         )
 
         save_data = {
@@ -303,11 +304,13 @@ def find_kway_collisions(A, b, B, logger, alpha_check=0.1, device=None, verbose=
     n_edges = int(adj.sum() // 2)
     if verbose:
         print(f"regions={R}, colliding pairs={n_edges} of {R*(R-1)//2}")
-    logger.log(f"regions={R}, colliding pairs={n_edges} of {R*(R-1)//2}")
+    if logger is not None:
+        logger.log(f"regions={R}, colliding pairs={n_edges} of {R*(R-1)//2}")
 
     # 2. k-cliques of the graph -> joint LP
     hits = [(h[0],h[1]) for h in hits if h is not None]
-    logger.log(f"{len(hits[0])}: {len(hits)}")
+    if logger is not None:
+        logger.log(f"{len(hits[0])}: {len(hits)}")
     while len(hits) > 0:
         tuples = find_supersets(hits)
         hits = process_map(partial(kway_collapse_process, An=An, bn=bn, P=P, Mn=Mn, cn=cn, w=w),
@@ -317,7 +320,8 @@ def find_kway_collisions(A, b, B, logger, alpha_check=0.1, device=None, verbose=
                 )
         hits = [h for h in hits if h is not None]
         print(f"{len(hits[0])}: {len(hits)}")
-        logger.log(f"{len(hits[0])}: {len(hits)}")
+        if logger is not None:
+            logger.log(f"{len(hits[0])}: {len(hits)}")
         break
 
     # for tup in combinations(range(R), k):

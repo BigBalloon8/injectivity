@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from projection import project_kernel_into_safe_region
 
 class FFN(nn.Module):
     def __init__(self, dim, h):
@@ -11,6 +12,15 @@ class FFN(nn.Module):
     def forward(self, x):
         acts = torch.relu(self.l1(x))
         return self.l2(acts)
+    
+    @torch.no_grad()
+    def proj(self, gamma=0.4):
+        up_proj = self.l1.weight
+        down = self.l2.weight
+        new_down, _, _ = project_kernel_into_safe_region(down, up_proj, gamma_lower=gamma)
+        self.l2.weight.set_(new_down)
+        
+        
 
 class MultiHeadAttention(nn.Module):
     """
@@ -136,6 +146,9 @@ class TransformerBlock(nn.Module):
         h = x + self.atten(normed_in, normed_in, normed_in)
         return h + self.ffn(self.ffn_norm(h))
     
+    def proj(self, gamma=0.4):
+        self.ffn.proj(gamma)
+    
 class Transformer(nn.Module):
     def __init__(self, dim, h_dim, n_heads, n_layers, vocab_size):
         super().__init__()
@@ -151,3 +164,16 @@ class Transformer(nn.Module):
             h = l(h)
         logits = self.out_norm(h)
         return self.out(logits)
+
+    def proj(self, idxs=None, gamma=0.4):
+        if idxs is None:
+            idxs = list(range(len(self.layers)))
+            
+        if isinstance(idxs, int):
+            idxs = [idxs]
+        
+        for i, b in enumerate(self.layers):
+            if i in idxs:
+                b.proj(gamma)
+            
+        

@@ -20,7 +20,7 @@ def accuracy(model, loader, meta, device):
     return correct / total
 
 def main():
-    task = "modular"
+    task = "kv"
     torch.manual_seed(2027)
 
     if task == "modular":  # mlp >= 64
@@ -30,7 +30,7 @@ def main():
         }
     elif task == "kv":  # mlp >= 2/4x n_keys
         kwargs = {
-            "n_keys": 32  # 32
+            "n_keys": 128  # 32
         }
     elif task == "kv_seq":
         kwargs = {
@@ -51,7 +51,8 @@ def main():
     dim=4
     h_dim=16
     n_layers=1
-    low_colapse_init=False
+    gamma=0.5
+    low_colapse_init=True
 
     model = Transformer(
         dim= dim,
@@ -67,7 +68,7 @@ def main():
             model.layers[0].ffn.l2.weight = torch.nn.Parameter(orth)
             
     
-    file_name = lambda folder: f"{folder}/{task}_tta_{kwargs.__repr__()}_{dim}_{h_dim}_{n_layers}_{low_colapse_init}_{num_epochs}"
+    file_name = lambda folder: f"{folder}/{task}_projtta_{kwargs.__repr__()}_{gamma}_{dim}_{h_dim}_{n_layers}_{low_colapse_init}_{num_epochs}"
     logger = Logger(task, f"{file_name("logs")}.log")
 
     #model = torch.compile(model).to(device)
@@ -81,6 +82,7 @@ def main():
             loss   = torch.nn.functional.cross_entropy(pred, y)
             loss.backward()
             opt.step()
+            model.proj(gamma=gamma)
             opt.zero_grad() 
         if epoch % 64==0: 
             if task in ("kv", "kv_seq"):

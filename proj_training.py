@@ -6,6 +6,7 @@ from data import make_dataset
 from toy_model import Transformer
 from logger import Logger
 from analysis import find_kway_collisions, matrix_from_kernel
+from grapher import create_graphs
 
 @torch.no_grad()
 def accuracy(model, loader, meta, device):
@@ -25,12 +26,12 @@ def main():
 
     if task == "modular":  # mlp >= 64
         kwargs = {
-            "p": 32,
-            "op": "mul",
+            "p": 17,
+            "op": "add",
         }
     elif task == "kv":  # mlp >= 2/4x n_keys
         kwargs = {
-            "n_keys": 128  # 32
+            "n_keys": 4096  # 32
         }
     elif task == "kv_seq":
         kwargs = {
@@ -51,7 +52,7 @@ def main():
     dim=4
     h_dim=16
     n_layers=1
-    gamma=0.5
+    gamma=1.0
     low_colapse_init=True
 
     model = Transformer(
@@ -74,6 +75,12 @@ def main():
     #model = torch.compile(model).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1.0)
 
+    metrics = {
+            "accuracy": [],
+            "losses": [],
+            "collapses": []
+        }
+
     for epoch in tqdm(range(num_epochs)):
         for x, y in train_loader:                  # x: (batch, seq_len) longs, y: (batch,)
             x, y = x.to(device), y.to(device)
@@ -82,7 +89,8 @@ def main():
             loss   = torch.nn.functional.cross_entropy(pred, y)
             loss.backward()
             opt.step()
-            model.proj(gamma=gamma)
+            if gamma < 1:
+                model.proj(gamma=gamma)
             opt.zero_grad() 
         if epoch % 64==0: 
             if task in ("kv", "kv_seq"):
@@ -97,8 +105,12 @@ def main():
             logger.log(f"Loss at Epoch {epoch+1}: {loss.mean().item():.5f}")
             logger.log(f"Accuracy at Epoch {epoch+1}: {acc:.2%}")
             logger.log(f"Num Collapsed pairs {epoch+1}: {pairs_collapsed}")
+            metrics["accuracy"].append(acc)
+            metrics["losses"].append(loss.mean().item())
+            metrics["collapses"].append(pairs_collapsed)
 
-
+    create_graphs(metrics["accuracy"], metrics["collapses"], "accuracy", "collapses", None, file_name("figs"))
+    create_graphs(metrics["losses"], metrics["collapses"], "losses", "collapses", None, file_name("figs"))
 
     # Checkpoint
     torch.save(model.state_dict(), f"{file_name("models")}.pt")

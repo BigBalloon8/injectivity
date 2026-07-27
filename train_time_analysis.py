@@ -6,6 +6,7 @@ from data import make_dataset
 from toy_model import Transformer
 from logger import Logger
 from analysis import find_kway_collisions, matrix_from_kernel
+from grapher import create_graphs
 
 @torch.no_grad()
 def accuracy(model, loader, meta, device):
@@ -25,7 +26,7 @@ def main():
 
     if task == "modular":  # mlp >= 64
         kwargs = {
-            "p": 32,
+            "p": 45,
             "op": "mul",
         }
     elif task == "kv":  # mlp >= 2/4x n_keys
@@ -73,6 +74,12 @@ def main():
     #model = torch.compile(model).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1.0)
 
+    metrics = {
+        "accuracy": [],
+        "losses": [],
+        "collapses": []
+    }
+    
     for epoch in tqdm(range(num_epochs)):
         for x, y in train_loader:                  # x: (batch, seq_len) longs, y: (batch,)
             x, y = x.to(device), y.to(device)
@@ -95,8 +102,13 @@ def main():
             logger.log(f"Loss at Epoch {epoch+1}: {loss.mean().item():.5f}")
             logger.log(f"Accuracy at Epoch {epoch+1}: {acc:.2%}")
             logger.log(f"Num Collapsed pairs {epoch+1}: {pairs_collapsed}")
+            metrics["accuracy"].append(acc)
+            metrics["losses"].append(loss.mean().item())
+            metrics["collapses"].append(pairs_collapsed)
+            
 
-
+    create_graphs(metrics["accuracy"], metrics["collapses"], "accuracy", "collapses", None, file_name)
+    create_graphs(metrics["losses"], metrics["collapses"], "losses", "collapses", None, file_name)
 
     # Checkpoint
     torch.save(model.state_dict(), f"{file_name("models")}.pt")

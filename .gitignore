@@ -2,3 +2,4 @@ __pycache__
 logs/*
 models/*
 nanogpt_train/data/fineweb10B/*
+figs/*

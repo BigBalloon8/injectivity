@@ -107,8 +107,8 @@ def main():
             metrics["collapses"].append(pairs_collapsed)
             
 
-    create_graphs(metrics["accuracy"], metrics["collapses"], "accuracy", "collapses", None, file_name)
-    create_graphs(metrics["losses"], metrics["collapses"], "losses", "collapses", None, file_name)
+    create_graphs(metrics["accuracy"], metrics["collapses"], "accuracy", "collapses", None, file_name("figs"))
+    create_graphs(metrics["losses"], metrics["collapses"], "losses", "collapses", None, file_name("figs"))
 
     # Checkpoint
     torch.save(model.state_dict(), f"{file_name("models")}.pt")

@@ -31,7 +31,7 @@ def main():
         }
     elif task == "kv":  # mlp >= 2/4x n_keys
         kwargs = {
-            "n_keys": 4096  # 32
+            "n_keys": 1024  # 32
         }
     elif task == "kv_seq":
         kwargs = {
@@ -52,7 +52,7 @@ def main():
     dim=4
     h_dim=16
     n_layers=1
-    gamma=1.0
+    gamma=0.4
     low_colapse_init=True
 
     model = Transformer(

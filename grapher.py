@@ -1558,7 +1558,7 @@ def create_graphs(met1, met2, met1_name="", met2_name="", plot_title=None, plot_
 
     fig.tight_layout() 
 
-    plt.savefig(f"{plot_title}_{met1_name}_{met2_name}.png")
+    plt.savefig(f"{plot_file}_{met1_name}_{met2_name}.png")
     
     plt.show()
 

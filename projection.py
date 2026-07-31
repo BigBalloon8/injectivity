@@ -16,7 +16,7 @@ def null_space(A, rcond=None):
     Q = vh[num:,:].T.conj()
     return Q
 
-
+@torch.compile
 def project_kernel_into_safe_region(
     M: torch.Tensor,
     A: torch.Tensor,
@@ -165,7 +165,7 @@ def project_kernel_into_safe_region(
     final_gap = torch.linalg.norm(P_safe - P0, ord=2)
 
     # Orthogonal projection of each row of M onto ker(U_safe.T).
-    M_safe = M @ (torch.eye(m) - P_safe)
+    M_safe = M  - M@P_safe
 
     final_rank = torch.linalg.matrix_rank(M_safe, tol=tolerance)
 
@@ -356,7 +356,7 @@ if __name__ == "__main__":
             safety_factor=0.95,
         )
 
-        collisions = find_kway_collisions(A, b, torch.tensor(B_safe), pairs=True, cache=False)
+        collisions = find_kway_collisions(A, b, torch.tensor(B_safe), pairs=True, cache=False, alpha_check=0.01)
         logger.log(f"g={gamma}: {collisions}")
         
         

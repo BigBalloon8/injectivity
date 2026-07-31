@@ -19,6 +19,8 @@ from torch.optim import AdamW
 import torch.nn.functional as F
 import torch.distributed as dist
 
+from projection import project_kernel_into_safe_region
+
 
 ########################################
 #              Dataloader              #
@@ -121,9 +123,28 @@ class MLP(nn.Module):
 
     def forward(self, x: Tensor):
         x = self.fc(x)
-        x = x.relu().square()
+        x = x.relu()
         x = self.proj(x)
         return x
+    
+    @torch.no_grad()
+    def reproj(self, gamma=0.3):
+        up_proj = self.fc.weight
+        down = self.proj.weight
+        if dist.get_rank() == 0:
+            new_down, _, _ = project_kernel_into_safe_region(down, up_proj, gamma_lower=gamma, return_info=False)
+            dist.broadcast(new_down, 0)
+        else:
+            dist.broadcast(down, 0)
+            new_down = down
+        self.proj.weight = torch.nn.Parameter(new_down)
+
+    @torch.no_grad()
+    def injective_init(self):
+        up_proj = self.fc.weight
+        orth = (up_proj.T*0.5).contiguous() # this keeps kaiming uniform distribution
+        self.proj.weight = torch.nn.Parameter(orth)
+        
 
 class Block(nn.Module):
     def __init__(self, dim: int):
@@ -137,6 +158,12 @@ class Block(nn.Module):
         x = x + self.attn(self.norm1(x))
         x = x + self.mlp(self.norm2(x))
         return x
+
+    def reproj(self, gamma=0.3):
+        self.mlp.reproj(gamma)
+    
+    def injective_init(self):
+        self.mlp.injective_init()
 
 class GPT(nn.Module):
     def __init__(self, vocab_size: int, num_layers: int, model_dim: int):
@@ -154,6 +181,22 @@ class GPT(nn.Module):
         logits = self.proj(self.norm2(x)).float()
         logits = 15 * logits * (logits.square() + 15**2).rsqrt()
         return F.cross_entropy(logits.view(targets.numel(), -1), targets.view(-1), reduction="sum")
+    
+    def reproj(self, idxs=None, gamma=0.3):
+        if idxs is None:
+            idxs = list(range(len(self.blocks)))
+            
+        if isinstance(idxs, int):
+            idxs = [idxs]
+        
+        for i, b in enumerate(self.blocks):
+            if i in idxs:
+                b.reproj(gamma)
+    
+    def injective_init(self):
+        for b in self.blocks:
+            b.injective_init()
+        
 
 
 ########################################
@@ -218,6 +261,7 @@ class Muon(torch.optim.Optimizer):
 ########################################
 
 # torchrun sets these env variables
+torch.manual_seed(8)
 device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
 torch.cuda.set_device(device)
 dist.init_process_group(backend="nccl", device_id=device)
@@ -247,18 +291,17 @@ print0("="*100)
 
 val_tokens = 20 * 524288
 batch_size = 8 * 64 * 1024
-mbs = 64
+mbs = 16
 val_inputs, val_targets = next(distributed_data_generator("data/fineweb10B/fineweb_val_*.bin", val_tokens))
 
-model = GPT(vocab_size=50304, num_layers=12, model_dim=768).cuda()
+model = GPT(vocab_size=50304, num_layers=12, model_dim=256).cuda()
 model.compile(dynamic=False)
 
 
 num_trials = int(sys.argv[-1]) if len(sys.argv) > 1 else 1
 
 for _ in range(num_trials):
-
-
+    
     ########################################
     #       Init & Optim Hyperparams       #
     ########################################
@@ -282,6 +325,11 @@ for _ in range(num_trials):
             w.normal_(mean=1, std=0)
         else:
             raise Exception(f"Uninitialized parameter: {name}")
+
+    gamma = 0.1
+
+    if gamma < 1:
+        model.injective_init()
 
     # create the optimizer(s)
     optimizer1 = AdamW([dict(params=[model.embed.weight], lr=0.7),
@@ -308,6 +356,8 @@ for _ in range(num_trials):
         for opt in optimizers:
             for group in opt.param_groups:
                 group["lr"] = group["initial_lr"] * eta
+    
+
 
 
     ########################################
@@ -364,6 +414,8 @@ for _ in range(num_trials):
         set_hparams(step)
         for opt in optimizers:
             opt.step()
+        if gamma < 1:
+            model.reproj(gamma=gamma)
         model.zero_grad(set_to_none=True)
         approx_training_time = training_time + (time.perf_counter() - t0)
         print0(f"step:{step+1}/{train_steps} train_time:{approx_training_time:.3f}s"

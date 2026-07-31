@@ -4,13 +4,18 @@ import torch.nn.functional as F
 from projection import project_kernel_into_safe_region
 
 class FFN(nn.Module):
-    def __init__(self, dim, h):
+    def __init__(self, dim, h, realized=False):
         super().__init__()
         self.l1 = nn.Linear(dim, h)
         self.l2 = nn.Linear(h, dim)
+        self.realized = realized
+        self.realized_sample = None
+        
     
     def forward(self, x):
         acts = torch.relu(self.l1(x))
+        if self.realized:
+            self.realized_sample = acts
         return self.l2(acts)
     
     @torch.no_grad()
@@ -134,10 +139,10 @@ class RMSNorm(torch.nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, dim, h_dim, n_heads=2):
+    def __init__(self, dim, h_dim, n_heads=2, realized=False):
         super().__init__()
         self.atten = MultiHeadAttention(dim, dim, dim, dim, n_heads, dropout=0.05)
-        self.ffn = FFN(dim, h_dim)
+        self.ffn = FFN(dim, h_dim, realized)
         self.atten_norm = RMSNorm(dim)
         self.ffn_norm = RMSNorm(dim)
     
@@ -150,12 +155,13 @@ class TransformerBlock(nn.Module):
         self.ffn.proj(gamma)
     
 class Transformer(nn.Module):
-    def __init__(self, dim, h_dim, n_heads, n_layers, vocab_size):
+    def __init__(self, dim, h_dim, n_heads, n_layers, vocab_size, realized=False):
         super().__init__()
         self.embeddings = nn.Embedding(vocab_size, dim)
-        self.layers = nn.ModuleList([TransformerBlock(dim, h_dim, n_heads) for _ in range(n_layers)])
+        self.layers = nn.ModuleList([TransformerBlock(dim, h_dim, n_heads, realized=realized) for _ in range(n_layers)])
         self.out_norm = RMSNorm(dim)
         self.out = nn.Linear(dim, vocab_size)
+        self.realized = realized
     
     def forward(self, token_ids):
         embeddings = self.embeddings(token_ids)
@@ -175,5 +181,14 @@ class Transformer(nn.Module):
         for i, b in enumerate(self.layers):
             if i in idxs:
                 b.proj(gamma)
+                
+    def get_realized(self):
+        if self.realized:
+            samples = []
+            for b in self.layers:
+                samples.append(
+                    b.ffn.realized_sample
+                )
+            return samples
             
         

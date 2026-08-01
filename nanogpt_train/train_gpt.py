@@ -140,9 +140,9 @@ class MLP(nn.Module):
         self.proj.weight = torch.nn.Parameter(new_down)
 
     @torch.no_grad()
-    def injective_init(self):
+    def injective_init(self, eps=1e-4):
         up_proj = self.fc.weight
-        orth = (up_proj.T*0.5).contiguous() # this keeps kaiming uniform distribution
+        orth = eps*(up_proj.T*0.5).contiguous() # this keeps kaiming uniform distribution
         self.proj.weight = torch.nn.Parameter(orth)
         
 
@@ -162,8 +162,8 @@ class Block(nn.Module):
     def reproj(self, gamma=0.3):
         self.mlp.reproj(gamma)
     
-    def injective_init(self):
-        self.mlp.injective_init()
+    def injective_init(self, eps=1):
+        self.mlp.injective_init(eps=eps)
 
 class GPT(nn.Module):
     def __init__(self, vocab_size: int, num_layers: int, model_dim: int):
@@ -193,9 +193,16 @@ class GPT(nn.Module):
             if i in idxs:
                 b.reproj(gamma)
     
-    def injective_init(self):
-        for b in self.blocks:
-            b.injective_init()
+    def injective_init(self, idxs=None, eps=1e-4):
+        if idxs is None:
+            idxs = list(range(len(self.blocks)))
+            
+        if isinstance(idxs, int):
+            idxs = [idxs]
+        
+        for i, b in enumerate(self.blocks):
+            if i in idxs:
+                b.injective_init(eps)
         
 
 
@@ -326,7 +333,7 @@ for _ in range(num_trials):
         else:
             raise Exception(f"Uninitialized parameter: {name}")
 
-    gamma = 0.1
+    gamma = 0.02 # 1 degree of freedom
 
     if gamma < 1:
         model.injective_init()

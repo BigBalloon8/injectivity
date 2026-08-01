@@ -101,8 +101,14 @@ def main():
             up_proj_b = model.layers[0].ffn.l1.bias
             down_proj = model.layers[0].ffn.l2.weight
             
-            realized = model.get_realized()
+            realized_blocks = model.get_realized()
+            for realized in realized_blocks:
+                realized_signs = torch.sign(realized)
+                unique_signs = torch.unique(realized_signs, dim=0)
+                
+                
             
+                        
             with torch.no_grad():
                pairs_collapsed = find_kway_collisions(up_proj.detach(), up_proj_b.detach(), down_proj.detach(), logger, pairs=True, cache=False, alpha_check=0.01)
             logger.log(f"Loss at Epoch {epoch+1}: {loss.mean().item():.5f}")

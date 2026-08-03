@@ -307,8 +307,8 @@ model.compile(dynamic=False)
 
 num_trials = int(sys.argv[-1]) if len(sys.argv) > 1 else 1
 
-for _ in range(num_trials):
-    
+for trial in range(num_trials):
+
     ########################################
     #       Init & Optim Hyperparams       #
     ########################################
@@ -427,5 +427,17 @@ for _ in range(num_trials):
         approx_training_time = training_time + (time.perf_counter() - t0)
         print0(f"step:{step+1}/{train_steps} train_time:{approx_training_time:.3f}s"
                + f" step_avg:{1000*approx_training_time/(step + 1):.2f}ms", console=True, log=False)
+
+    # --------------- CHECKPOINT SECTION -----------------
+    if dist.get_rank() == 0:
+        os.makedirs("checkpoints", exist_ok=True)
+        ckpt_path = f"checkpoints/g={gamma}_{Path(logfile).stem}_trial{trial}.pt"
+        torch.save(dict(model={k: v.detach().cpu() for k, v in model.state_dict().items()},
+                        config=dict(vocab_size=50304, num_layers=12, model_dim=256),
+                        gamma=gamma, train_steps=train_steps, trial=trial,
+                        val_loss=val_loss.item(), training_time=training_time, code=code),
+                   ckpt_path)
+        print0(f"saved checkpoint to {ckpt_path}", console=True)
+    dist.barrier()
 
 dist.destroy_process_group()

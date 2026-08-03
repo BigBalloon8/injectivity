@@ -69,7 +69,7 @@ def run(seed, low_colapse_init):
     #logger = Logger(task, f"{file_name("logs")}.log")
 
     model = torch.compile(model).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1.0)
+    opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
     accs = []
     losses = []

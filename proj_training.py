@@ -52,8 +52,8 @@ def main():
     dim=4
     h_dim=16
     n_layers=1
-    gamma=0.4
-    low_colapse_init=True
+    gamma=1
+    low_colapse_init=True and gamma < 1
 
     model = Transformer(
         dim= dim,
@@ -73,7 +73,7 @@ def main():
     logger = Logger(task, f"{file_name("logs")}.log")
 
     #model = torch.compile(model).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1.0)
+    opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
     metrics = {
             "accuracy": [],

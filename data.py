@@ -123,7 +123,7 @@ def make_modular(p=113, op="add", train_frac=0.3, batch_size=None, seed=0):
 # --------------------------------------------------------------------------- #
 # Task 2: key -> value memorization  (MLP capacity)
 # --------------------------------------------------------------------------- #
-def make_kv(n_keys=512, n_values=None, train_frac=1.0, batch_size=None, seed=0):
+def make_kv(n_keys=512, n_values=None, train_frac=1.0, batch_size=None, seed=0, unique=False):
     """A fixed table of random key -> value pairs. Sequence is just [key].
 
     Values are random, so there is NOTHING to generalize to -- this measures
@@ -140,7 +140,10 @@ def make_kv(n_keys=512, n_values=None, train_frac=1.0, batch_size=None, seed=0):
 
     g = torch.Generator().manual_seed(seed)
     keys = torch.arange(n_keys)
-    values = torch.randint(0, n_values, (n_keys,), generator=g)
+    if unique:
+        values = torch.randperm(n_values, generator=g)
+    else:   
+        values = torch.randint(0, n_values, (n_keys,), generator=g)
 
     x = keys.unsqueeze(1)                       # (n_keys, 1): [key]
     y = values

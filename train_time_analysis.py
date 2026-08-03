@@ -31,7 +31,7 @@ def main():
         }
     elif task == "kv":  # mlp >= 2/4x n_keys
         kwargs = {
-            "n_keys": 32  # 32
+            "n_keys": 2048  # 32
         }
     elif task == "kv_seq":
         kwargs = {
@@ -72,7 +72,7 @@ def main():
     logger = Logger(task, f"{file_name("logs")}.log")
 
     #model = torch.compile(model).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1.0)
+    opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
     metrics = {
         "accuracy": [],

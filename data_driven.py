@@ -31,11 +31,13 @@ def main():
         }
     elif task == "kv":  # mlp >= 2/4x n_keys
         kwargs = {
-            "n_keys": 1024  # 32
+            "n_keys": 1024*4,  # 32
+            "unique": True
         }
     elif task == "kv_seq":
         kwargs = {
             "n_keys": 256  # 32
+            
         }
     elif task == "boolean":  # mlp >= 32
         kwargs = {
@@ -44,23 +46,22 @@ def main():
     
     train_loader, test_loader, meta = make_dataset(task, **kwargs)
 
-    print(len(train_loader))
-
     num_epochs = 2**12
     device = "cpu"
 
     dim=4
     h_dim=16
     n_layers=1
-    gamma=0.4
-    low_colapse_init=True
+    gamma=0.02
+    low_colapse_init= True and gamma < 1
 
     model = Transformer(
         dim= dim,
         h_dim=h_dim,
         n_heads=1,
         n_layers=n_layers,
-        vocab_size=meta.vocab_size
+        vocab_size=meta.vocab_size,
+        realized=True
     )
     if low_colapse_init:
         with torch.no_grad():
@@ -73,13 +74,7 @@ def main():
     logger = Logger(task, f"{file_name("logs")}.log")
 
     #model = torch.compile(model).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1.0)
-
-    metrics = {
-            "accuracy": [],
-            "losses": [],
-            "collapses": []
-        }
+    opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
     for epoch in tqdm(range(num_epochs)):
         for x, y in train_loader:                  # x: (batch, seq_len) longs, y: (batch,)
@@ -105,21 +100,13 @@ def main():
             for realized in realized_blocks:
                 realized_signs = torch.sign(realized)
                 unique_signs = torch.unique(realized_signs, dim=0)
-                
-                
-            
                         
             with torch.no_grad():
                pairs_collapsed = find_kway_collisions(up_proj.detach(), up_proj_b.detach(), down_proj.detach(), logger, pairs=True, cache=False, alpha_check=0.01)
             logger.log(f"Loss at Epoch {epoch+1}: {loss.mean().item():.5f}")
             logger.log(f"Accuracy at Epoch {epoch+1}: {acc:.2%}")
             logger.log(f"Num Collapsed pairs {epoch+1}: {pairs_collapsed}")
-            metrics["accuracy"].append(acc)
-            metrics["losses"].append(loss.mean().item())
-            metrics["collapses"].append(pairs_collapsed)
-
-    create_graphs(metrics["accuracy"], metrics["collapses"], "accuracy", "collapses", None, file_name("figs"))
-    create_graphs(metrics["losses"], metrics["collapses"], "losses", "collapses", None, file_name("figs"))
+            logger.log(f"Num Regions Realized: {unique_signs.shape[0]}")
 
     # Checkpoint
     torch.save(model.state_dict(), f"{file_name("models")}.pt")

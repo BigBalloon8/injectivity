@@ -4,3 +4,4 @@ models/*
 nanogpt_train/data/fineweb10B/*
 figs/*
 nanogpt_train/logs/*
+nanogpt_train/checkpoints/*

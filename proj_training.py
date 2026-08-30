@@ -22,7 +22,7 @@ def accuracy(model, loader, meta, device):
 
 def main():
     task = "kv"
-    torch.manual_seed(2027)
+    torch.manual_seed(2026)
 
     if task == "modular":  # mlp >= 64
         kwargs = {
@@ -31,8 +31,9 @@ def main():
         }
     elif task == "kv":  # mlp >= 2/4x n_keys
         kwargs = {
-            "n_keys": 1024  # 32
-        }
+                    "n_keys": 2**14,  # 32
+                    "batch_size": 1024
+                }
     elif task == "kv_seq":
         kwargs = {
             "n_keys": 256  # 32
@@ -47,13 +48,13 @@ def main():
     print(len(train_loader))
 
     num_epochs = 2**12
-    device = "cpu"
+    device = "cuda"
 
     dim=4
     h_dim=16
     n_layers=1
-    gamma=1
-    low_colapse_init=True and gamma < 1
+    gamma = 0.05
+    low_colapse_init= True and gamma < 1
 
     model = Transformer(
         dim= dim,
@@ -72,7 +73,7 @@ def main():
     file_name = lambda folder: f"{folder}/{task}_projtta_{kwargs.__repr__()}_{gamma}_{dim}_{h_dim}_{n_layers}_{low_colapse_init}_{num_epochs}"
     logger = Logger(task, f"{file_name("logs")}.log")
 
-    #model = torch.compile(model).to(device)
+    model = torch.compile(model).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
     metrics = {

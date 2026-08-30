@@ -333,7 +333,7 @@ for trial in range(num_trials):
         else:
             raise Exception(f"Uninitialized parameter: {name}")
 
-    gamma = 0.02 # 1 degree of freedom
+    gamma = 1.0 # 1 degree of freedom
 
     if gamma < 1:
         model.injective_init()
@@ -363,7 +363,6 @@ for trial in range(num_trials):
         for opt in optimizers:
             for group in opt.param_groups:
                 group["lr"] = group["initial_lr"] * eta
-    
 
 
 

@@ -34,7 +34,7 @@ def main():
             }
         elif task == "kv":  # mlp >= 2/4x n_keys
             kwargs = {
-                "n_keys": 128  # 32
+                "n_keys": 1024  # 32
             }
         elif task == "kv_seq":
             kwargs = {
@@ -74,8 +74,8 @@ def main():
         file_name = lambda folder: f"{folder}/{task}_tta_{kwargs.__repr__()}_{dim}_{h_dim}_{n_layers}_{low_colapse_init}_{num_epochs}"
         logger = Logger(task, f"{file_name("logs")}.log")
 
-        #model = torch.compile(model).to(device)
-        opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1.0)
+        model = torch.compile(model).to(device)
+        opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
         
         for epoch in tqdm(range(num_epochs)):
             for x, y in train_loader:                  # x: (batch, seq_len) longs, y: (batch,)

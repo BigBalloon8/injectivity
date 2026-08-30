@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from projection import project_kernel_into_safe_region
+from proj_v3 import nearest_with_kernel_angle_bound_fast
 
 class FFN(nn.Module):
     def __init__(self, dim, h, realized=False):
@@ -22,7 +23,8 @@ class FFN(nn.Module):
     def proj(self, gamma=0.4):
         up_proj = self.l1.weight
         down = self.l2.weight
-        new_down, _, _ = project_kernel_into_safe_region(down, up_proj, gamma_lower=gamma)
+        new_down = nearest_with_kernel_angle_bound_fast(up_proj, down, gamma)
+        #new_down, _, _ = project_kernel_into_safe_region(down, up_proj, gamma_lower=gamma)
         self.l2.weight.set_(new_down)
         
         
@@ -168,6 +170,8 @@ class Transformer(nn.Module):
         h = embeddings
         for l in self.layers:
             h = l(h)
+        if self.realized:
+            self.out_states = h
         logits = self.out_norm(h)
         return self.out(logits)
 

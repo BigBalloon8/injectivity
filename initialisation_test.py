@@ -8,6 +8,7 @@ from toy_model import Transformer
 from logger import Logger
 from analysis import find_kway_collisions, matrix_from_kernel
 
+
 @torch.no_grad()
 def accuracy(model, loader, meta, device):
     if loader is None:
@@ -31,7 +32,7 @@ def run(seed, low_colapse_init):
         }
     elif task == "kv":  # mlp >= 2/4x n_keys
         kwargs = {
-            "n_keys": 256  # 32
+            "n_keys": 2**8 # 32
         }
     elif task == "kv_seq":
         kwargs = {
@@ -44,8 +45,8 @@ def run(seed, low_colapse_init):
     
     train_loader, test_loader, meta = make_dataset(task, **kwargs, seed=int(seed))
 
-    num_epochs = 2**12
-    device = "cpu"
+    num_epochs = 2**10
+    device = "cuda"
 
     dim=4
     h_dim=16
@@ -61,20 +62,23 @@ def run(seed, low_colapse_init):
     if low_colapse_init:
         with torch.no_grad():
             up_proj = model.layers[0].ffn.l1.weight
-            orth = up_proj.T*0.5 # this keeps kaiming uniform distribution
+            orth = 1e-5*up_proj.T*0.5 # this keeps kaiming uniform distribution
             model.layers[0].ffn.l2.weight = torch.nn.Parameter(orth)
+        gamma = 0.05
+    else:
+        gamma = 1.0
             
     
     file_name = lambda folder: f"{folder}/{task}_initialise_{kwargs.__repr__()}_{dim}_{h_dim}_{n_layers}_{low_colapse_init}_{num_epochs}"
     #logger = Logger(task, f"{file_name("logs")}.log")
 
-    model = torch.compile(model).to(device)
+    model = (model).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
     accs = []
     losses = []
     
-    for epoch in (range(num_epochs)):
+    for epoch in tqdm(range(num_epochs)):
         for x, y in train_loader:                  # x: (batch, seq_len) longs, y: (batch,)
             x, y = x.to(device), y.to(device)
             logits = model(x)                      # (batch, seq_len, vocab_size)
@@ -82,6 +86,8 @@ def run(seed, low_colapse_init):
             loss   = torch.nn.functional.cross_entropy(pred, y)
             loss.backward()
             opt.step()
+            if gamma < 1:
+                model.proj(gamma=gamma)
             opt.zero_grad() 
         if epoch % 64==0: 
             if task in ("kv", "kv_seq"):
@@ -106,7 +112,7 @@ def run(seed, low_colapse_init):
     #torch.save(model.state_dict(), f"{file_name("models")}.pt")
 
 def main():
-    seeds = torch.arange(40) + 1000
+    seeds = torch.arange(3) + 100
     
     logger = Logger("init_test", f"init_test.log")
     

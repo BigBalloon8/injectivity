@@ -21,7 +21,7 @@ def accuracy(model, loader, meta, device):
     return correct / total
 
 def main():
-    task = "modular"
+    task = "kv"
     torch.manual_seed(2027)
 
     if task == "modular":  # mlp >= 64
@@ -31,7 +31,8 @@ def main():
         }
     elif task == "kv":  # mlp >= 2/4x n_keys
         kwargs = {
-            "n_keys": 2048  # 32
+            "n_keys": 2**14,  # 32
+            "batch_size": 1024
         }
     elif task == "kv_seq":
         kwargs = {
@@ -47,7 +48,7 @@ def main():
     print(len(train_loader))
 
     num_epochs = 2**12
-    device = "cpu"
+    device = "cuda"
 
     dim=4
     h_dim=16
@@ -71,7 +72,7 @@ def main():
     file_name = lambda folder: f"{folder}/{task}_tta_{kwargs.__repr__()}_{dim}_{h_dim}_{n_layers}_{low_colapse_init}_{num_epochs}"
     logger = Logger(task, f"{file_name("logs")}.log")
 
-    #model = torch.compile(model).to(device)
+    model = torch.compile(model.to(device))
     opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
     metrics = {

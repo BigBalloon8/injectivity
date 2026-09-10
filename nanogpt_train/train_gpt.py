@@ -20,6 +20,7 @@ import torch.nn.functional as F
 import torch.distributed as dist
 
 from projection import project_kernel_into_safe_region
+from proj_v3 import nearest_with_kernel_angle_bound_fast
 
 
 ########################################
@@ -132,7 +133,8 @@ class MLP(nn.Module):
         up_proj = self.fc.weight
         down = self.proj.weight
         if dist.get_rank() == 0:
-            new_down, _, _ = project_kernel_into_safe_region(down, up_proj, gamma_lower=gamma, return_info=False)
+            new_down = nearest_with_kernel_angle_bound_fast(up_proj, down, gamma)
+            #new_down, _, _ = project_kernel_into_safe_region(down, up_proj, gamma_lower=gamma)
             dist.broadcast(new_down, 0)
         else:
             dist.broadcast(down, 0)
@@ -333,7 +335,7 @@ for trial in range(num_trials):
         else:
             raise Exception(f"Uninitialized parameter: {name}")
 
-    gamma = 1.0 # 1 degree of freedom
+    gamma = 0.05 # 1 degree of freedom
 
     if gamma < 1:
         model.injective_init()

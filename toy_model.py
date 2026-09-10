@@ -23,10 +23,18 @@ class FFN(nn.Module):
     def proj(self, gamma=0.4):
         up_proj = self.l1.weight
         down = self.l2.weight
-        new_down = nearest_with_kernel_angle_bound_fast(up_proj, down, gamma)
-        #new_down, _, _ = project_kernel_into_safe_region(down, up_proj, gamma_lower=gamma)
+        #new_down = nearest_with_kernel_angle_bound_fast(up_proj, down, gamma)
+        new_down, _, _ = project_kernel_into_safe_region(down, up_proj, gamma_lower=gamma)
         self.l2.weight.set_(new_down)
-        
+    
+    
+    def mean_sq_cos(self):
+        # W: (d_ff, d_model); rows are neuron directions
+        W = F.normalize(self.l1.weight, dim=1)
+        n, d = W.shape
+        fp = (W.T @ W).pow(2).sum()        # sum of cos² over all pairs incl. diagonal (which sums to n)
+        return (fp - n) / (n * (n - 1))    # mean cos² over distinct pairs; floor ≈ 1/d when n ≫ d
+            
         
 
 class MultiHeadAttention(nn.Module):
@@ -141,12 +149,12 @@ class RMSNorm(torch.nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, dim, h_dim, n_heads=2, realized=False):
+    def __init__(self, dim, h_dim, n_heads=2, realized=False, ffn_norm=True):
         super().__init__()
         self.atten = MultiHeadAttention(dim, dim, dim, dim, n_heads, dropout=0.05)
         self.ffn = FFN(dim, h_dim, realized)
         self.atten_norm = RMSNorm(dim)
-        self.ffn_norm = RMSNorm(dim)
+        self.ffn_norm = RMSNorm(dim) if ffn_norm else nn.Identity()
     
     def forward(self, x):
         normed_in = self.atten_norm(x)
@@ -156,11 +164,14 @@ class TransformerBlock(nn.Module):
     def proj(self, gamma=0.4):
         self.ffn.proj(gamma)
     
+    def mean_sq_cos(self):
+        return self.ffn.mean_sq_cos()
+    
 class Transformer(nn.Module):
-    def __init__(self, dim, h_dim, n_heads, n_layers, vocab_size, realized=False):
+    def __init__(self, dim, h_dim, n_heads, n_layers, vocab_size, realized=False, ffn_norm=True):
         super().__init__()
         self.embeddings = nn.Embedding(vocab_size, dim)
-        self.layers = nn.ModuleList([TransformerBlock(dim, h_dim, n_heads, realized=realized) for _ in range(n_layers)])
+        self.layers = nn.ModuleList([TransformerBlock(dim, h_dim, n_heads, realized=realized, ffn_norm=ffn_norm) for _ in range(n_layers)])
         self.out_norm = RMSNorm(dim)
         self.out = nn.Linear(dim, vocab_size)
         self.realized = realized
@@ -195,4 +206,6 @@ class Transformer(nn.Module):
                 )
             return samples
             
+    def mean_sq_cos(self):
+        return sum([l.mean_sq_cos() for l in self.layers]) / len(self.layers)
         

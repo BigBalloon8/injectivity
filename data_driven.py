@@ -33,7 +33,7 @@ def main():
         }
     elif task == "kv":  # mlp >= 2/4x n_keys
         kwargs = {
-            "n_keys": 1024*16,  # 32
+            "n_keys": 2**12,  # 32
             "unique": True
         }
     elif task == "kv_seq":
@@ -48,13 +48,13 @@ def main():
     
     train_loader, test_loader, meta = make_dataset(task, **kwargs)
 
-    num_epochs = 2**10
+    num_epochs = 2**11
     device = "cuda"
 
     dim=4
     h_dim=16
     n_layers=1
-    gamma=1.0
+    gamma=0.05
     low_colapse_init= True and gamma < 1
 
     model = Transformer(
@@ -63,7 +63,8 @@ def main():
         n_heads=1,
         n_layers=n_layers,
         vocab_size=meta.vocab_size,
-        realized=True
+        realized=True,
+        ffn_norm=False
     )
     if low_colapse_init:
         with torch.no_grad():
@@ -83,7 +84,7 @@ def main():
             x, y = x.to(device), y.to(device)
             logits = model(x)                      # (batch, seq_len, vocab_size)
             pred   = logits[:, meta.target_pos, :] # the one prediction position
-            loss   = torch.nn.functional.cross_entropy(pred, y)
+            loss   = torch.nn.functional.cross_entropy(pred, y) + model.mean_sq_cos()*0.5
             loss.backward()
             opt.step()
             if gamma < 1:
@@ -110,10 +111,10 @@ def main():
             #logger.log(f"Num Collapsed pairs {epoch+1}: {pairs_collapsed}")
             logger.log(f"Num Regions Realized: {unique_signs.shape[0]}")
     
-    states = model.out_states.squeeze().detach().cpu()
-    X_emb = UMAP(n_neighbors=30).fit_transform(states).detach()
-    plt.scatter(X_emb[:,0], X_emb[:,1])
-    plt.show()
+    # states = model.out_states.squeeze().detach().cpu()
+    # X_emb = UMAP(n_neighbors=30).fit_transform(states).detach()
+    # plt.scatter(X_emb[:,0], X_emb[:,1])
+    # plt.show()
     
 
     # Checkpoint

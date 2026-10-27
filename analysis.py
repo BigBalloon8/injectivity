@@ -21,6 +21,7 @@ from math import comb
 #    Reuses the vertex-enumeration idea: each region <-> a sign vector of
 #    (A_i x + b_i). Returns an (R, m) int8 tensor of +1/-1 sign vectors.
 # ----------------------------------------------------------------------
+@torch.compile
 def region_patterns(A, b, device, chunk=4096, tol=1e-9):
     A = A.to(device, torch.float64); b = b.to(device, torch.float64)
     m, n = A.shape
@@ -53,6 +54,7 @@ def region_patterns(A, b, device, chunk=4096, tol=1e-9):
 # 2. Per-region affine pieces  M_r = B D_r A,  c_r = B D_r b   (batched).
 #    D_r = diag(pattern > 0).  Also the within-region rank test.
 # ----------------------------------------------------------------------
+@torch.compile
 def region_maps(A, b, B, patterns):
     A = A.double(); b = b.double(); B = B.double()
     act = (patterns > 0).double()                        # (R, m)  activation masks
@@ -119,29 +121,6 @@ def batch_inputs(A, b, sig_r, sig_p, M_r, M_p, c_r, c_p, w, cap):
     return g, A_ub2, b_ub2, A_eq, b_eq, k
 
 
-def find_supersets(tuples):
-    if not tuples:
-        return []
-
-    k = len(next(iter(tuples)))              # k = n-1
-    present = {tuple(sorted(t)) for t in tuples}   # canonicalize + O(1) lookup
-
-    # group by prefix = first k-1 elements
-    groups = defaultdict(list)
-    for t in present:
-        groups[t[:-1]].append(t[-1])
-
-    results = []
-    for prefix, lasts in groups.items():
-        lasts.sort()
-        for i in range(len(lasts)):
-            for j in range(i + 1, len(lasts)):
-                cand = prefix + (lasts[i], lasts[j])   # stays sorted
-                # all n subsets of size k must be present
-                if all(sub in present for sub in combinations(cand, k)):
-                    results.append(cand)
-    return results
-
 def distinct_colapse_process(indexs, An, bn, Bn, P, Mn, cn, w, verbose=True):
     i,j = indexs
     m, n = An.shape
@@ -161,13 +140,6 @@ def distinct_colapse_process(indexs, An, bn, Bn, P, Mn, cn, w, verbose=True):
 
 
 
-def kway_collapse_process(tup, An, bn, P, Mn, cn, w):
-    ok, xs = kway_collapse(An, bn,
-                               [P[t] for t in tup],
-                               [Mn[t] for t in tup],
-                               [cn[t] for t in tup], w)
-    if ok:
-        return tup
 
 # ----------------------------------------------------------------------
 # k-way distinct collapse:
@@ -237,9 +209,72 @@ def kway_collapse(A, b, sigs, Ms, cs, w, eps=1e-6, cap=10.0):
             return True, xs
     return False, None
 
+def kway_collapse_process(tup, An, bn, P, Mn, cn, w):
+    ok, xs = kway_collapse(An, bn,
+                               [P[t] for t in tup],
+                               [Mn[t] for t in tup],
+                               [cn[t] for t in tup], w)
+    if ok:
+        return tup
+    
+
+def find_supersets(tuples):
+    if not tuples:
+        return []
+
+    k = len(next(iter(tuples)))              # k = n-1
+    present = {tuple(sorted(t)) for t in tuples}   # canonicalize + O(1) lookup
+
+    # group by prefix = first k-1 elements
+    groups = defaultdict(list)
+    for t in present:
+        groups[t[:-1]].append(t[-1])
+
+    results = []
+    for prefix, lasts in groups.items():
+        lasts.sort()
+        for i in range(len(lasts)):
+            for j in range(i + 1, len(lasts)):
+                cand = prefix + (lasts[i], lasts[j])   # stays sorted
+                # all n subsets of size k must be present
+                if all(sub in present for sub in combinations(cand, k)):
+                    results.append(cand)
+    return results
+
+def find_n_pairs_collapsing(A,b,B, patterns=None, logger=None, alpha_check=0.1, device=None, verbose=True):
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    A = A.to(device); b = b.to(device); B = B.to(device)
+    m, n = A.shape
+
+    if patterns is None:
+        patterns = region_patterns(A, b, device)
+    
+    R = patterns.shape[0]
+    M, c, DA, within_ok = region_maps(A, b, B, patterns)
+    P = patterns.cpu().numpy().astype(float)
+    Mn, cn = M.cpu().numpy(), c.cpu().numpy()
+    An, bn, Bn = A.cpu().numpy(), b.cpu().numpy(), B.cpu().numpy()
+
+    rng = np.random.default_rng(0)
+    w = rng.standard_normal(m)
+
+    # 1. pairwise collision graph (prune)
+    hits = process_map(partial(distinct_colapse_process, An=An, bn=bn, Bn=Bn, P=P, Mn=Mn, cn=cn, w=w, verbose=False), 
+                    random.sample(list(combinations(range(R), 2)), k=int(alpha_check*comb(R, 2))), 
+                    max_workers=8, 
+                    chunksize=16*32,
+                    disable = not verbose
+            )
+    hits = [(h[0],h[1]) for h in hits if h is not None]
+    
+    return len(hits), R
 
 
-def find_kway_collisions(A, b, B, logger=None, alpha_check=0.1, device=None, verbose=True, pairs=False, cache=False):
+        
+
+def find_kway_collisions(A, b, B, logger=None, alpha_check=0.1, device=None, verbose=True, cache=False):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
     file_loaded = False
@@ -291,10 +326,6 @@ def find_kway_collisions(A, b, B, logger=None, alpha_check=0.1, device=None, ver
             "w": w
         }
         torch.save(save_data, "cache.pt")
-    
-    if pairs: 
-        hits = [(h[0],h[1]) for h in hits if h is not None]
-        return len(hits)
 
     for hit in hits:
         if hit is not None:

@@ -1537,14 +1537,22 @@ s = """2026-07-23 14:56:27|kv|Loss at Epoch 1: 3.71120
 2026-07-24 10:00:01|kv|Accuracy at Epoch 32705: 100.00%
 2026-07-24 10:00:01|kv|Num Collapsed pairs 32705: 2227"""
 
-def create_graphs(met1, met2, met1_name="", met2_name="", plot_title=None, plot_file=None,):
-    x = range(len(met1))    
+def create_graphs(met1, met2, met1_name="", met2_name="", plot_title=None, plot_file="", log_freq=64, show=False):
+    if isinstance(met1[0], list):
+        x = range(0, len(met1[0])*log_freq, log_freq)  
+    else:
+        x = range(0, len(met1)*log_freq, log_freq)  
     fig, ax1 = plt.subplots()
 
     color = 'tab:red'
     ax1.set_xlabel('Epoch')
     ax1.set_ylabel(met1_name, color=color)
-    ax1.plot(x, met1, color=color)
+    if isinstance(met1[0], list):
+        for i, met in enumerate(met1):
+            color = (0.5 + 0.5*((i+1)/len(met1)), 0, 0)
+            ax1.plot(x, met, color=color)
+    else:
+        ax1.plot(x, met1, color=color)
     ax1.tick_params(axis='y', labelcolor=color)
     if plot_title is not None:
         ax1.set_title(plot_title)
@@ -1553,14 +1561,25 @@ def create_graphs(met1, met2, met1_name="", met2_name="", plot_title=None, plot_
 
     color = 'tab:blue'
     ax2.set_ylabel(met2_name, color=color)  
-    ax2.plot(x, met2, color=color)
+    if isinstance(met2[0], list):
+        largest = float("-inf")
+        for i, met in enumerate(met2):
+            color = (0, 0.5 + 0.5*((i+1)/len(met1)), 0)
+            ax2.plot(x, met, color=color)
+            largest = max(largest, max(met))
+        # ax1
+            
+    else:
+        ax1.plot(x, met2, color=color)
     ax2.tick_params(axis='y', labelcolor=color)
 
     fig.tight_layout() 
-
-    plt.savefig(f"{plot_file}_{met1_name}_{met2_name}.png")
     
-    plt.show()
+    plt.savefig(f"{plot_file}_{met1_name}_{met2_name}.png")
+    if show:
+        plt.show()
+    
+
 
 def main():
     lines = s.splitlines()
@@ -1590,6 +1609,7 @@ def main():
     ax2.tick_params(axis='y', labelcolor=color)
 
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
+    
     
     
     plt.plot(range(len(losses)), collapses)

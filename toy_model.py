@@ -16,7 +16,7 @@ class FFN(nn.Module):
     def forward(self, x):
         acts = torch.relu(self.l1(x))
         if self.realized:
-            self.realized_sample = acts
+            self.realized_sample = acts.reshape(-1, acts.shape[-1])
         return self.l2(acts)
     
     @torch.no_grad()

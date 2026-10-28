@@ -11,8 +11,9 @@ from toy_model import Transformer
 from logger import Logger
 from analysisv2 import find_n_pairs_collapsing_torch
 from grapher import create_graphs
+import time
 
-
+torch.set_float32_matmul_precision("high")
 
 @dataclass
 class RunConfig:
@@ -21,9 +22,9 @@ class RunConfig:
     task_kwargs: dict
     seed: int
     
-    num_epochs: int = 2**13
-    log_freq = 64
-    mbs = 2**15
+    num_epochs: int = 2**15
+    log_freq: int = 64
+    mbs: int = 2**13
     
     device: str = "cuda"
     dim: int = 4
@@ -31,12 +32,12 @@ class RunConfig:
     n_heads: int = 1
     n_layers: int = 1
     gamma: float = 1.0
-    low_collapse_init= False
-    track_activations = True
+    low_collapse_init: bool= False
+    track_activations: bool  = True
     
     
-    def file_name(self, dir=".") -> str:
-        return f"./{dir}/{self.task}_{self.task_kwargs.__repr__()}_{self.gamma}_{self.dim}_{self.h_dim}_{self.n_layers}_{self.low_collapse_init}_{self.num_epochs}_{self.track_activations}"
+    def file_name(self, dir=".", include_seed=False) -> str:
+        return f"./{dir}/{self.task}_{self.task_kwargs.__repr__()}{f'_{self.seed}' if include_seed else ''}_{self.gamma}_{self.dim}_{self.h_dim}_{self.n_layers}_{self.low_collapse_init}_{self.num_epochs}_{self.track_activations}"
     
         
 
@@ -47,9 +48,15 @@ def accuracy(model, loader, meta, device):
     correct = total = 0
     for x, y in loader:
         x, y = x.to(device), y.to(device)
-        pred = model(x)[:, meta.target_pos, :].argmax(-1)
-        correct += (pred == y).sum().item()
-        total   += y.numel()
+        if x.shape[0] > 65535:
+            for i in range(x.shape[0]//(2**15)):
+                pred = model(x[i*2**15:(i+1)*2**15])[:, meta.target_pos, :].argmax(-1)
+                correct += (pred == y[i*2**15:(i+1)*2**15]).sum().item()
+                total   += y.numel()
+        else:
+            pred = model(x)[:, meta.target_pos, :].argmax(-1)
+            correct += (pred == y).sum().item()
+            total   += y.numel()
     return correct / total
 
 
@@ -85,22 +92,26 @@ def run(config: RunConfig, logger=None):
         }
     if config.track_activations:
         metrics["realised_p"] = []
-
+    
+    if len(train_loader) == 1:
+        train_loader = [x for x in train_loader]
+    
     for epoch in (range(config.num_epochs)):
         # training
         for x, y in train_loader:                  # x: (batch, seq_len) longs, y: (batch,)
             x, y = x.to(config.device), y.to(config.device)
-            for i in range(x.shape[0]//config.mbs + 1):
+            n_mbs_steps = max(1, x.shape[0]//config.mbs)
+            for i in range(n_mbs_steps):
                 logits = model(x[i*config.mbs:(i+1)*config.mbs])                      # (batch, seq_len, vocab_size)
-                pred   = logits[i*config.mbs:(i+1)*config.mbs, meta.target_pos, :] # the one prediction position
-                loss   = torch.nn.functional.cross_entropy(pred, y)
+                pred   = logits[:, meta.target_pos, :] # the one prediction position
+                loss   = torch.nn.functional.cross_entropy(pred, y[i*config.mbs:(i+1)*config.mbs])
                 loss.backward()
             opt.step()
             if config.gamma < 1:
                 model.proj(gamma=config.gamma)
             opt.zero_grad() 
         
-        if (epoch+1) % config.log_freq==0: 
+        if (epoch+1) % config.log_freq==0 and epoch != 0: 
             if config.task in ("kv", "kv_seq"):
                 acc = accuracy(model, train_loader, meta, config.device)
             else:
@@ -171,10 +182,10 @@ def run(config: RunConfig, logger=None):
     
     
 def main():
-    n_runs = 3
-    seeds = (torch.arange(n_runs) + 100).tolist()
+    n_runs = 10
+    seeds = (torch.arange(n_runs) + 888).tolist()
     
-    for n_keys in [2**13, 2**16, 2**18]:
+    for n_keys in [2**15]:
         run_metrics = {}
         config = RunConfig(
                     task = "kv",
@@ -183,7 +194,8 @@ def main():
                                 
                             },
                     seed = 0,
-                    num_epochs=2**15
+                    num_epochs=2**13,
+                    log_freq=256
                     )
         
         logger = Logger(hashlib.sha1(config.file_name().encode()).hexdigest(), f"{config.file_name("logs")}.log")
@@ -202,9 +214,9 @@ def main():
         collapses = [run_metrics[seed]["collapses"] for seed in seeds]
         realised_p = [run_metrics[seed]["realised_p"] for seed in seeds]
         
-        create_graphs(accuracies, collapses, "accuracy", "collapses", None, config.file_name("figs"), config.log_freq)
-        create_graphs(accuracies, realised_p, "accuracy", "realised p collapses", None, config.file_name("figs"), config.log_freq)
-        create_graphs(losses, realised_p, "losses", "realised p collapses", None, config.file_name("figs"), config.log_freq)
+        create_graphs(accuracies, collapses, "accuracy", "collapses", None, config.file_name("figs", include_seed=True), config.log_freq)
+        create_graphs(accuracies, realised_p, "accuracy", "realised p collapses", None, config.file_name("figs", include_seed=True), config.log_freq)
+        create_graphs(losses, realised_p, "losses", "realised p collapses", None, config.file_name("figs", include_seed=True), config.log_freq)
         
         
     

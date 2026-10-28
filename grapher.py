@@ -1537,12 +1537,25 @@ s = """2026-07-23 14:56:27|kv|Loss at Epoch 1: 3.71120
 2026-07-24 10:00:01|kv|Accuracy at Epoch 32705: 100.00%
 2026-07-24 10:00:01|kv|Num Collapsed pairs 32705: 2227"""
 
+linestyles = [
+    '-',                        # solid
+    '--',                       # dashed
+    ':',                        # dotted
+    '-.',                       # dash-dot
+    (0, (8, 3)),                # long dash
+    (0, (1, 4)),                # loosely dotted
+    (0, (3, 1, 1, 1, 1, 1)),    # dash-dot-dot
+    (0, (5, 8)),                # loosely dashed
+    (0, (12, 3, 2, 3)),         # long dash-dot
+    (0, (2, 1)),                # densely dashed
+]
+
 def create_graphs(met1, met2, met1_name="", met2_name="", plot_title=None, plot_file="", log_freq=64, show=False):
     if isinstance(met1[0], list):
         x = range(0, len(met1[0])*log_freq, log_freq)  
     else:
         x = range(0, len(met1)*log_freq, log_freq)  
-    fig, ax1 = plt.subplots()
+    fig, ax1 = plt.subplots(figsize=(12,12))
 
     color = 'tab:red'
     ax1.set_xlabel('Epoch')
@@ -1550,7 +1563,7 @@ def create_graphs(met1, met2, met1_name="", met2_name="", plot_title=None, plot_
     if isinstance(met1[0], list):
         for i, met in enumerate(met1):
             color = (0.5 + 0.5*((i+1)/len(met1)), 0, 0)
-            ax1.plot(x, met, color=color)
+            ax1.plot(x, met, color=color, linestyle=linestyles[i%len(linestyles)])
     else:
         ax1.plot(x, met1, color=color)
     ax1.tick_params(axis='y', labelcolor=color)
@@ -1565,7 +1578,7 @@ def create_graphs(met1, met2, met1_name="", met2_name="", plot_title=None, plot_
         largest = float("-inf")
         for i, met in enumerate(met2):
             color = (0, 0.5 + 0.5*((i+1)/len(met1)), 0)
-            ax2.plot(x, met, color=color)
+            ax2.plot(x, met, color=color, linestyle=linestyles[i%len(linestyles)])
             largest = max(largest, max(met))
         # ax1
             

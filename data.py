@@ -72,12 +72,12 @@ def _make_loaders(x, y, train_frac, batch_size, seed):
 
     train_ds = TensorDataset(x[tr_idx], y[tr_idx])
     bs = n_train if batch_size is None else batch_size
-    train_loader = DataLoader(train_ds, batch_size=max(bs, 1), shuffle=True)
+    train_loader = DataLoader(train_ds, batch_size=max(bs, 1), shuffle=True, num_workers=4)
 
     test_loader = None
     if len(te_idx) > 0:
         test_ds = TensorDataset(x[te_idx], y[te_idx])
-        test_loader = DataLoader(test_ds, batch_size=len(test_ds), shuffle=False)
+        test_loader = DataLoader(test_ds, batch_size=len(test_ds), shuffle=False, num_workers=4)
 
     return train_loader, test_loader, n_train, n - n_train
 

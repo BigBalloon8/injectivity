@@ -35,7 +35,7 @@ import torch
 from cuopt_linprog import cuopt_batch_linprog
 
 PID = os.getpid()
-SOLVE_SECONDS = 3.0        # keep solving at least this long while sampling
+SOLVE_SECONDS = 5.0        # keep solving at least this long while sampling
 UTIL_THRESHOLD = 5         # % GPU utilization that must be observed
 RTOL = 1e-6                # objective agreement vs scipy
 

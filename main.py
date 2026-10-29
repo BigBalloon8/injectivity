@@ -126,6 +126,9 @@ def run(config: RunConfig, logger=None):
             if config.track_activations:
                 realized_blocks = model.get_realized()
                 for b_idx, realized in enumerate(realized_blocks):
+                    up_proj = model.layers[b_idx].ffn.l1.weight
+                    up_proj_b = model.layers[b_idx].ffn.l1.bias
+                    down_proj = model.layers[b_idx].ffn.l2.weight
                     realized_signs = torch.sign(realized).to(torch.int8)
                     unique_signs = torch.unique(realized_signs, dim=0).squeeze()
                     unique_signs = 2*unique_signs - 1
@@ -195,6 +198,7 @@ def main():
                     low_collapse_init=True,
                     seed = 0,
                     n_layers=2,
+                    mbs=2**13,
                     num_epochs=2**13,
                     log_freq=256
                     )

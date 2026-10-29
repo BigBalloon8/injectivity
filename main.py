@@ -182,17 +182,18 @@ def run(config: RunConfig, logger=None):
     
     
 def main():
-    n_runs = 10
-    seeds = (torch.arange(n_runs) + 888).tolist()
+    n_runs = 1
+    seeds = (torch.arange(n_runs) + 889).tolist()
     
-    for n_keys in [2**15]:
+    for gamma in [1, 0.5, 0.2]:
         run_metrics = {}
         config = RunConfig(
                     task = "kv",
                     task_kwargs= {
-                                "n_keys": n_keys
+                                "n_keys": 2**15
                                 
                             },
+                    gamma=gamma,
                     seed = 0,
                     num_epochs=2**13,
                     log_freq=256

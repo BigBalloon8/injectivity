@@ -24,7 +24,7 @@ class RunConfig:
     
     num_epochs: int = 2**15
     log_freq: int = 64
-    mbs: int = 2**13
+    mbs: int = 2**15
     
     device: str = "cuda"
     dim: int = 4
@@ -39,8 +39,7 @@ class RunConfig:
     def file_name(self, dir=".", include_seed=False) -> str:
         return f"./{dir}/{self.task}_{self.task_kwargs.__repr__()}{f'_{self.seed}' if include_seed else ''}_{self.gamma}_{self.dim}_{self.h_dim}_{self.n_layers}_{self.low_collapse_init}_{self.num_epochs}_{self.track_activations}"
     
-        
-
+    
 @torch.no_grad()
 def accuracy(model, loader, meta, device):
     if loader is None:
@@ -91,7 +90,7 @@ def run(config: RunConfig, logger=None):
             "log_freq": config.log_freq
         }
     if config.track_activations:
-        metrics["realised_p"] = []
+        metrics["realised_p"] = [[]]*len(model.layers)
     
     if len(train_loader) == 1:
         train_loader = [x for x in train_loader]
@@ -126,7 +125,7 @@ def run(config: RunConfig, logger=None):
             
             if config.track_activations:
                 realized_blocks = model.get_realized()
-                for realized in realized_blocks:
+                for b_idx, realized in enumerate(realized_blocks):
                     realized_signs = torch.sign(realized).to(torch.int8)
                     unique_signs = torch.unique(realized_signs, dim=0).squeeze()
                     unique_signs = 2*unique_signs - 1
@@ -141,7 +140,7 @@ def run(config: RunConfig, logger=None):
                                                                            verbose=False)
                     logger.log(f"Num Realised Collapsed pairs {epoch+1}: {realised_pairs_collapsed}")
                     logger.log(f"p Realised collapsed pairs {epoch+1}: {realised_pairs_collapsed/math.comb(R,2):.2%}")
-                    metrics["realised_p"].append(realised_pairs_collapsed/math.comb(R,2))
+                    metrics["realised_p"][b_idx].append(realised_pairs_collapsed/math.comb(R,2))
                     
             
             with torch.no_grad():
@@ -185,7 +184,7 @@ def main():
     n_runs = 1
     seeds = (torch.arange(n_runs) + 889).tolist()
     
-    for gamma in [1, 0.5, 0.2]:
+    for gamma in [1]:
         run_metrics = {}
         config = RunConfig(
                     task = "kv",
@@ -193,8 +192,9 @@ def main():
                                 "n_keys": 2**15
                                 
                             },
-                    gamma=gamma,
+                    low_collapse_init=True,
                     seed = 0,
+                    n_layers=2,
                     num_epochs=2**13,
                     log_freq=256
                     )
@@ -206,18 +206,23 @@ def main():
             logger.log(config.__repr__())
             print(f"seed: {seed}")
             
-            metrics, _, logger =run(config, logger)
+            metrics, _, logger = run(config, logger)
             
             run_metrics[seed] = metrics
         
         accuracies = [run_metrics[seed]["accuracy"] for seed in seeds]
         losses = [run_metrics[seed]["losses"] for seed in seeds]
         collapses = [run_metrics[seed]["collapses"] for seed in seeds]
-        realised_p = [run_metrics[seed]["realised_p"] for seed in seeds]
+        realised_p = [run_metrics[seed]["realised_p"][0] for seed in seeds]
         
         create_graphs(accuracies, collapses, "accuracy", "collapses", None, config.file_name("figs", include_seed=True), config.log_freq)
         create_graphs(accuracies, realised_p, "accuracy", "realised p collapses", None, config.file_name("figs", include_seed=True), config.log_freq)
         create_graphs(losses, realised_p, "losses", "realised p collapses", None, config.file_name("figs", include_seed=True), config.log_freq)
+        
+        realised_p_per_layer = [run_metrics[seed[0]]["realised_p"][b_idx] for b_idx in config.n_layers]
+        
+        create_graphs(accuracies[0], realised_p_per_layer, "accuracy", "realised p collapses per block", None, config.file_name("figs", include_seed=True), config.log_freq)
+        
         
         
     

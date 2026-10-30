@@ -34,7 +34,7 @@ class RunConfig:
     gamma: float = 1.0
     low_collapse_init: bool= False
     track_activations: bool  = True
-    
+    freeze_embedding: bool = False
     
     def file_name(self, dir=".", include_seed=False) -> str:
         return f"./{dir}/{self.task}_{self.task_kwargs.__repr__()}{f'_{self.seed}' if include_seed else ''}_{self.gamma}_{self.dim}_{self.h_dim}_{self.n_layers}_{self.low_collapse_init}_{self.num_epochs}_{self.track_activations}"
@@ -71,7 +71,8 @@ def run(config: RunConfig, logger=None):
         n_heads=config.n_heads,
         n_layers=config.n_layers,
         vocab_size=meta.vocab_size,
-        realized=config.track_activations
+        realized=config.track_activations,
+        freeze_embedding=config.freeze_embedding
     )
     if config.low_collapse_init:
         with torch.no_grad():

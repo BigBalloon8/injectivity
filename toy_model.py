@@ -172,9 +172,9 @@ class TransformerBlock(nn.Module):
         return self.ffn.mean_sq_cos()
     
 class Transformer(nn.Module):
-    def __init__(self, dim, h_dim, n_heads, n_layers, vocab_size, realized=False, ffn_norm=True):
+    def __init__(self, dim, h_dim, n_heads, n_layers, vocab_size, realized=False, ffn_norm=True, freeze_embedding=False):
         super().__init__()
-        self.embeddings = nn.Embedding(vocab_size, dim)
+        self.embeddings = nn.Embedding(vocab_size, dim, _freeze=freeze_embedding)
         self.layers = nn.ModuleList([TransformerBlock(dim, h_dim, n_heads, realized=realized, ffn_norm=ffn_norm) for _ in range(n_layers)])
         self.out_norm = RMSNorm(dim)
         self.out = nn.Linear(dim, vocab_size)

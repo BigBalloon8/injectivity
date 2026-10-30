@@ -1,0 +1,88 @@
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{minted}
+\usepackage{xcolor}
+
+\title{Increased Information in Transformer FFNs}
+\author{}
+\date{}
+
+\newcommand\TODO[1]{\large{\textbf{\textcolor{red}{TODO: #1}}}}
+
+\begin{document}
+\paragraph{Setup:} In a standard transformer feed-forward block, an input $x\in\mathbb{R}^n$ is mapped to the output $B (\text{ReLU}(Ax + b))$, where $m>n$, $A\in\mathbf{R}^{m\times n}$ and $B\in\mathbf{R}^{n\times m}$ both have rank $n$, and $b\in \mathbb{R}^m$ with $b\neq 0$. $A,B$ and $b$ are generated in a stochastic process so we may treat them as randomly generated (e.g. no problem with linear dependency between matrices).
+
+\section{Finding Orthants}\label{find-orthants}
+The transformation on each point in up-projection space ($Ax+b$) is determined by the orthant at which the point lies in.\\ 
+\\
+As $x$ ranges over $\mathbb{R}^n$, the point $y = Ax + b$ sweeps out an $n$-dimensional affine subspace sitting inside $\mathbb{R}^m$. Which orthant $y$ lies in is exactly the sign pattern of its coordinates $\big(\operatorname{sign}(y_1),\dots,\operatorname{sign}(y_m)\big)$.
+Now look at each coordinate as a function of the parameter $x$:
+$$y_i = A_i x + b_i,$$
+where $A_i$ is the $i$-th row. The set $H_i=\{x : A_i x + b_i = 0\}$ is a hyperplane in the parameter space $\mathbb{R}^n$, and $\operatorname{sign}(y_i)$ just tells you which side of that hyperplane $x$ is on. So a distinct orthant is intersected for each distinct combination of signs that is actually realized — i.e., for each region \textit{cut out by the arrangement of $m$ hyperplanes in $\mathbb{R}^n$} Counting orthants intersected $\;=\;$ counting regions of an $m$-hyperplane arrangement in $\mathbb{R}^n$. For hyperplanes in general position that region count is
+$$
+\sum_{k=0}^{n}\binom{m}{k}.
+$$
+Every region has a corner in which every corner is where exactly $n$-hyperplanes meet,  Conversely, sitting at such a corner and stepping into each of the $2^n$ local sign-sectors lands you in $2^n$ distinct regions touching that corner. So instead of trying to sample interior points of regions (unreliable), we enumerate regions by their vertices. Every region is anchored at at least one vertex, so sweeping all vertices and all local sectors, then deduplicating, recovers exactly the region set with no misses.\\
+\\
+We check all combinations of $n$ hyperplanes ($H_i$), A vertex of the arrangement is a point where $n$ of the linear forms vanish simultaneously, so each size-$n$ subset $\{i_1,\dots,i_n\}$ is a candidate vertex. There are $\binom{m}{n}$ of them.\\
+\\
+Writing $A_s\in\mathbb{R}^{n\times n}$ for those $n$ rows, the candidate vertex solves $A_s v=-b_s$. \mintinline{python}{v = solve(As, -bs)}. This is $v = -A_s^{-1}b_s$, the point where all $n$ chosen forms are zero.\\
+\\
+\mintinline{python}{S = sign(v @ A.T + b)}. Evaluate all $m$ forms $Av+b$ at the corner. The $n$ chosen coordinates come out $\approx 0$; the remaining $m-n$ are nonzero and give the fixed $\pm1$ signs that this corner shares with every region touching it.\\
+\\
+For each vertex we take its pattern $S$ and overwrite the $n$ vanishing coordinates with each of those $2^n$ sign choices. We do this for all vertices and deduplicated repeating sign patterns to get the full list of sign patterns.\\
+\\
+We expect our algorithm to return $\sum_{k=0}^{n}\binom{m}{k}$ patterns which it does. 
+
+
+\section{Finding Overlaps (LP)} \label{distinct-pairs}
+The ReLU functions causes points in different orthants to form distinct linear regions, for general $A,b,B$ overlaps after the down projection happen between different linear regions. We pose the problem of finding if 2 region overlaps as an LP feasibility problem.\\
+\\
+We use the algorithm described in Section \ref{find-orthants} to find the list of realised orthants from ($Ax+b$), then we compare each pair of linear regions formed after the ReLU $r$ and $r'$. Each orthant has a sign vector in $s_r=\{0, 1\}^m$ where $0\mapsto-$ and $1\mapsto+$, ReLU acts on each orthant with the linear tranformation $D_r=\operatorname{diag}(s_r)$, each linear region is defined by $D_r(Ax+b)\ge0\iff -D_rAx \le D_rb$ where $\operatorname{sign}(Ax+b)=r$. 2 linear regions overlap when $BD_r(Ax +b)=BD_{r'}(Ax'+b)$. These act as our main constraints for our LP.\\
+\\
+Our LP is trying to find 2 input points $x$ and $x'$ one in $r$ and one in $r'$, we stack them into a single unkown vector $z=[x,\  x']$.
+\subsection*{Inequalities}
+We define the following inequalities to keep each $x$ and $x'$ their regions. 
+$$
+\begin{bmatrix} D_rA & 0 \\ 0 & D_{r'}A \end{bmatrix}z + \begin{bmatrix} D_rb \\ D_{r'}b  \end{bmatrix} \ge 0 \iff \begin{bmatrix} -D_rA & 0 \\ 0 & -D_{r'}A \end{bmatrix}z \le \begin{bmatrix} D_rb \\ D_{r'}b  \end{bmatrix} 
+$$
+
+\subsection*{Equalities}
+$$
+BD_r(Ax +b)=BD_{r'}(Ax'+b) \iff \left[BD_rA,\ -BD_{r'}A\right]z = \left[BD_{r'}b,\ - BD_{r}b\right] 
+$$
+If we can find a value for $z$ such that this equality holds then there is this overlap between the 2 linear regions.
+\subsection*{Objective}
+Let $y=D_r(Ax+b)$ and $y'=D_{r'}(Ax+b)$, if the regions $r$ and $r'$ share a boundary then there will exists a point $y=y'$ that satisfies the above constraints but in order to find overlap between regions we want to make sure that $y\neq y'$ or $y-y'\neq0$ is part of our objective. LP requires a scalar value to optimize, we take some random vector $w\in\mathbb{R}^m$ to project $y-y'$ onto since $y-y'$ can be nonzero it is very unlikely that $w$ is orthogonal to $y-y'$. Thus our scalar value is $t=w\cdot(y-y')$, we can express $t$ in terms of $z$ as 
+$$
+t = w\cdot(y-y') = \underbrace{[wD_rA, \  -wD_{r'}A]}_{g}\cdot z + \underbrace{ w\cdot(D_rb-D_{r'}b)}_{k}
+$$
+So $t=g\cdot z+k$, linear in $z$, exactly the form of an LP. $g$ is the part that depends on the variables, $k$ is a constant offset. We need to introduce a further cap on t (we use 10), to prevent it going to infinity, we don't care about the true maximum only whether $t$ can escape 0 for the 2 regions. We add the inequalities $g\cdot z \le\text{cap}$ and $-g\cdot z \le-\text{cap}$. We have no bounds on $z$.\\
+\\
+To see if $t$ can escape 0 we have to run the LP twice to both maximize $t\to \text{cap}$ and minimize $t\to-\text{cap}$.
+
+\section{Overlaps $>2$}
+For the overlap of $k$ regions, we have points $x_1,\dots,x_k$, each in its own region $r_i$, with all $B$-images equal, and all ReLU outputs $y_i$ pairwise distinct. We stack the points into an unknown variable along with the scalar $t$, to get $z=[x_1,\ \dots, \ x_k,\ t]$. 
+\subsection*{Inequalities}
+We use the same block matrix structure as in Section \ref{distinct-pairs} with the extra free constraint $0\cdot t \le 0$.
+\subsection*{Equalities}
+We chain all the images to the first region, 
+$$
+BD_{r_1}(Ax_1 +b)=BD_{r_i}(Ax_i+b) \iff \left[BD_{r_1}A,\ -BD_{r_i}A\right]z = \left[BD_{r_i}b,\ - BD_{r_i}b\right] 
+$$
+for $i=2,\dots,k$, That's $(k-1)n$ equalities and automatically forces all images equal. We also have the extra equality that $0\cdot t =0$.
+\subsection*{Objective}
+An LP's feasible region is always convex: it's an intersection of half-spaces and hyperplanes, so if two points are feasible, the whole segment between them is feasible. Every constraint you're allowed to write $\le,\ \ge,\  =$ preserves that.\\
+\\
+What we need is $y_i\neq y_j$ for all combinations of $i,j\in\{1,\dots,k\}$, or if we project onto random $w$ then for $u_i=w\cdot y_i$, we need $u_i\neq u_j$. The set where $u_i\neq u_j$ is the plane minus the diagonal, 2 open half planes with this wall of unallowed values. If we take a point from each half plane then there exists a point in the line segment between them such that $u_i=u_j$ which contradicts the necessity of the whole line segment being feasible for a feasible region.\\
+\\
+And the failure isn't hypothetical, it's guaranteed: edges that are shared between to regions (where $y_i = y_j$) are feasible for all the other constraints.\\
+\\
+We split the non-convex set into its convex chambers and solve one LP per chamber. This is exactly what we did in Section \ref{distinct-pairs}: two solves, pushing $w\cdot(y-y')$ up and then down, $u_1 < u_2$ and $u_1 > u_2$. For general $k$, "all $u_i$ pairwise distinct" means avoiding all $\binom{k}{2}$ diagonal walls $u_i = u_j$, this involves checking all possible orderings of $u_1,\dots, u_k$.\\
+\\
+For an ordering of $k$-regions $\pi$, we want to add the constraint $u_{\pi(j)}<u_{\pi(j+1)}$ for all $j=0,...,k-1$. LPs cant work with $<$, so we use the objective to account for this. We seek to maximise the scalar $t$ such that the constraints $u_{\pi(j)}+t\le u_{\pi(j+1)}$ are met. If $t$ can escape 0 then we have a valid feasible solution and an overlap between the $k$ regions occurs.
+
+
+\end{document}

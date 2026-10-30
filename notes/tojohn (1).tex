@@ -1,0 +1,295 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage{hyperref}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{example}[theorem]{Example}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\col}{\operatorname{col}}
+\newcommand{\row}{\operatorname{row}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Gr}{\operatorname{Gr}}
+\newcommand{\norm}[1]{\left\lVert #1 \right\rVert}
+\newcommand{\Fro}{\mathrm{F}}
+\newcommand{\Qp}{Q_{\perp}}
+\newcommand{\Pop}{\Pi}
+\newcommand{\Tf}{\mathcal{T}}
+\newcommand{\Sf}{\mathcal{S}}
+\newcommand{\Ff}{\mathcal{F}}
+\DeclareMathOperator{\diag}{diag}
+\DeclareMathOperator{\sign}{sign}
+
+\title{The nearest matrix whose kernel is angularly close to a given subspace}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Problem statement}
+
+Throughout, $A\in\R^{m\times n}$ has full column rank $n<m$, $B\in\R^{n\times m}$, and $\alpha\in[0,\pi/2)$.
+Let $\Ff\subseteq\R^{n\times m}$ denote the set of matrices $B'$ such that every principal angle between $\ker B'$ and $\col(A)^\perp$ is at most $\alpha$.
+We want to solve
+\begin{equation}\label{eq:main}
+  \min_{B'\in\Ff}\ \norm{B'-B}_\Fro .
+\end{equation}
+
+\subsection*{Notation}
+Fix a full QR decomposition $A=[\,Q\ \ \Qp\,]\begin{bmatrix}R\\0\end{bmatrix}$ so that $Q\in\R^{m\times n}$ and $\Qp\in\R^{m\times(m-n)}$ are orthonormal bases of $\col(A)$ and $\col(A)^\perp$ respectively.
+For a subspace $S$ we write $P_S$ for the orthogonal projector onto $S$, and $P_A=P_{\col(A)}=QQ^\top$.
+$\Gr(k,m)$ is the set of $k$-dimensional subspaces of $\R^m$, and $\sigma_i(\cdot)$ denotes singular values.
+
+\begin{definition}[principal angles]
+Let $U,V\subseteq\R^m$ be subspaces with $p=\dim U\le \dim V$, and let $Q_U,Q_V$ be orthonormal bases.
+The principal angles $0\le\theta_1\le\dots\le\theta_p\le\pi/2$ between $U$ and $V$ are defined by
+$\cos\theta_i=\sigma_{p+1-i}(Q_U^\top Q_V)$, i.e.\ the cosines are the singular values of $Q_U^\top Q_V$ in decreasing order.
+We write $\theta_{\max}(U,V)=\theta_p$.
+\end{definition}
+
+The following standard facts are used freely.
+
+\begin{lemma}\label{lem:facts}
+Let $U,V\subseteq\R^m$ be subspaces.
+\begin{enumerate}
+\item[(a)] If $\dim U\le\dim V$ then $\cos\theta_{\max}(U,V)=\min_{u\in U,\ \norm u=1}\norm{P_V u}$.
+\item[(b)] If $\dim U=\dim V$ then $\theta_{\max}(U,V)=\theta_{\max}(U^\perp,V^\perp)$ and $\norm{P_U-P_V}_2=\sin\theta_{\max}(U,V)$.
+\item[(c)] If $\dim U\le \dim V\subseteq V'$ then $\theta_{\max}(U,V')\le\theta_{\max}(U,V)$.
+\end{enumerate}
+\end{lemma}
+\begin{proof}
+(a) $\sigma_{\min}(Q_V^\top Q_U)=\min_{\norm x=1}\norm{Q_V^\top Q_U x}=\min_{u\in U,\norm u=1}\norm{P_V u}$ since $\norm{Q_V^\top u}=\norm{P_V u}$.
+(b) See e.g.\ Golub--Van Loan, \S6.4.3: the nonzero principal angles of $(U,V)$ and $(U^\perp,V^\perp)$ coincide, and $\norm{P_U-P_V}_2=\sin\theta_{\max}$.
+(c) Immediate from (a), since $\norm{P_{V'}u}\ge\norm{P_V u}$ for $V\subseteq V'$.
+\end{proof}
+
+\section{Reduction to an optimisation over the Grassmannian}
+
+Note that $\dim\ker B'=m-\rank B'\ge m-n=\dim\col(A)^\perp$, so the constraint defining $\Ff$ reads
+$\theta_{\max}(\col(A)^\perp,\ker B')\le\alpha$, and by Lemma~\ref{lem:facts}(a) it says that
+every unit vector of $\col(A)^\perp$ has a component of length at least $\cos\alpha$ in $\ker B'$.
+In particular $0\in\Ff$, so \eqref{eq:main} is always feasible; the reduction below shows that this trivial feasible point is never better than a full-rank one.
+
+Define the feasible set of subspaces
+\begin{equation}
+  \Sf_\alpha=\{S\in\Gr(n,m):\ \theta_{\max}(S,\col(A))\le\alpha\}
+\end{equation}
+and the reduced objective $\ell(S)=\norm{B(I-P_S)}_\Fro^2$.
+
+\begin{lemma}\label{lem:fixedS}
+Let $S\subseteq\R^m$ be a subspace. Among all $B'$ with $\row(B')\subseteq S$, the unique minimiser of $\norm{B'-B}_\Fro$ is $B'=BP_S$, and the minimum value is $\ell(S)$.
+\end{lemma}
+\begin{proof}
+$\row(B')\subseteq S$ iff $B'=B'P_S$. Then $B-B'=B(I-P_S)+(BP_S-B')$, and the two terms have row spaces in $S^\perp$ and $S$ respectively, hence are Frobenius-orthogonal:
+$\norm{B-B'}_\Fro^2=\norm{B(I-P_S)}_\Fro^2+\norm{BP_S-B'}_\Fro^2$.
+\end{proof}
+
+\begin{theorem}[reduction]\label{thm:reduction}
+Problem \eqref{eq:main} attains its minimum, and
+\begin{equation}\label{eq:reduced}
+  \min_{B'\in\Ff}\norm{B'-B}_\Fro^2 \;=\; \min_{S\in\Sf_\alpha}\ \ell(S)
+  \;=\;\min_{S\in\Sf_\alpha}\ \bigl(\norm B_\Fro^2-\tr(P_S B^\top B)\bigr).
+\end{equation}
+Moreover, if $S^\star$ minimises the right-hand side then $B'=BP_{S^\star}$ minimises the left-hand side, and conversely every minimiser of \eqref{eq:main} is of the form $BP_{S}$ for some minimiser $S\in\Sf_\alpha$ of $\ell$.
+\end{theorem}
+
+\begin{proof}
+\emph{Step 1: every $S\in\Sf_\alpha$ gives a feasible point.}
+Let $S\in\Sf_\alpha$ and $B'=BP_S$. Then $\row(B')\subseteq S$, so $\ker B'\supseteq S^\perp$.
+By Lemma~\ref{lem:facts}(b) (equal dimensions $n$) $\theta_{\max}(S^\perp,\col(A)^\perp)=\theta_{\max}(S,\col(A))\le\alpha$, and by (c) $\theta_{\max}(\col(A)^\perp,\ker B')\le\theta_{\max}(\col(A)^\perp,S^\perp)\le\alpha$. Hence $B'\in\Ff$ and $\norm{B'-B}_\Fro^2=\ell(S)$. This proves ``$\le$'' in \eqref{eq:reduced}.
+
+\emph{Step 2: every feasible point is dominated by some $S\in\Sf_\alpha$.}
+Let $B'\in\Ff$, let $S_0=\row(B')$ (so $\dim S_0=r\le n$) and $N=\ker B'=S_0^\perp$.
+Since $\theta_{\max}(\col(A)^\perp,N)\le\alpha<\pi/2$, the map $P_N|_{\col(A)^\perp}$ is injective, so $N':=P_N\,\col(A)^\perp$ is an $(m-n)$-dimensional subspace of $N$.
+For $v\in\col(A)^\perp$ we have $P_{N'}v=P_{N'}P_Nv=P_Nv$ (as $P_Nv\in N'\subseteq N$), so by Lemma~\ref{lem:facts}(a)
+$\cos\theta_{\max}(\col(A)^\perp,N')=\min_{v}\norm{P_{N'}v}=\min_v\norm{P_N v}\ge\cos\alpha$.
+Put $S:=N'^\perp\in\Gr(n,m)$. Then $\theta_{\max}(S,\col(A))=\theta_{\max}(N',\col(A)^\perp)\le\alpha$, i.e.\ $S\in\Sf_\alpha$, and $S\supseteq N^\perp=S_0=\row(B')$.
+By Lemma~\ref{lem:fixedS} applied to $S$, $\norm{BP_S-B}_\Fro^2=\ell(S)\le\norm{B'-B}_\Fro^2$, with equality iff $B'=BP_S$.
+This proves ``$\ge$'' in \eqref{eq:reduced} together with the statement about minimisers.
+
+\emph{Existence.} $\Sf_\alpha$ is a closed subset of the compact space $\Gr(n,m)$ (as $S\mapsto\theta_{\max}(S,\col(A))$ is continuous) and $\ell$ is continuous, so the minimum on the right of \eqref{eq:reduced} is attained; by Step 1 so is the minimum on the left.
+Finally $\ell(S)=\tr\big((I-P_S)B^\top B\big)=\norm B_\Fro^2-\tr(P_SB^\top B)$.
+\end{proof}
+
+\begin{remark}
+The minimiser need not be unique: for $m=2$, $n=1$, $A=e_1$, $B=e_2^\top$ and any $\alpha\in(0,\pi/2)$ the two subspaces at angle $\alpha$ on either side of $\col(A)$ give the same value, by symmetry.
+\end{remark}
+
+\section{Parametrisation and the reduced problem}
+
+\begin{theorem}[tangent parametrisation]\label{thm:param}
+Let $S\in\Gr(n,m)$ with $\theta_{\max}(S,\col(A))<\pi/2$. Then there is a unique $T\in\R^{(m-n)\times n}$ with
+\begin{equation}
+  S=\col(Q+\Qp T),
+\end{equation}
+namely $T=\Qp^\top U_S(Q^\top U_S)^{-1}$ for any basis $U_S$ of $S$; conversely every $T$ defines such an $S$.
+The principal angles $\theta_1\le\dots\le\theta_n$ between $S$ and $\col(A)$ satisfy
+\begin{equation}
+  \tan\theta_i=\sigma_i(T)\qquad(\text{singular values in increasing order}),
+\end{equation}
+so in particular $\theta_{\max}(S,\col(A))\le\alpha \iff \norm T_2\le\tan\alpha$.
+Consequently, for $\alpha<\pi/2$,
+\begin{equation}
+ \Sf_\alpha=\bigl\{\col(Q+\Qp T):\ T\in\Tf_\alpha\bigr\},\qquad
+ \Tf_\alpha:=\{T\in\R^{(m-n)\times n}:\ \norm T_2\le\tan\alpha\},
+\end{equation}
+and $\Tf_\alpha$ is a compact convex set whose Euclidean projection is
+$\Pop(T)=U\,\diag\big(\min\{\sigma_i,\tan\alpha\}\big)V^\top$ for the SVD $T=U\diag(\sigma_i)V^\top$.
+\end{theorem}
+\begin{proof}
+Let $U_S$ be an orthonormal basis of $S$. Then $\theta_{\max}(S,\col(A))<\pi/2$ iff $\sigma_{\min}(Q^\top U_S)>0$ iff $C:=Q^\top U_S$ is invertible.
+Set $W=U_S C^{-1}$; then $\col W=S$ and $Q^\top W=I$, so $W=QQ^\top W+\Qp\Qp^\top W=Q+\Qp T$ with $T=\Qp^\top W$.
+For uniqueness, if $\col(Q+\Qp T)=\col(Q+\Qp T')$ then $Q+\Qp T'=(Q+\Qp T)M$ for some $M$; left-multiplying by $Q^\top$ gives $M=I$, hence $T'=T$.
+Conversely $W=Q+\Qp T$ always has full column rank ($Q^\top W=I$) and $\theta_{\max}(\col W,\col A)<\pi/2$.
+For the angles: $W^\top W=I+T^\top T=:G$, so $U_S=WG^{-1/2}$ is an orthonormal basis of $S$ and $Q^\top U_S=G^{-1/2}=(I+T^\top T)^{-1/2}$, whose singular values are $(1+\sigma_i(T)^2)^{-1/2}$. Hence $\cos\theta_i=(1+\sigma_i(T)^2)^{-1/2}$, i.e.\ $\tan\theta_i=\sigma_i(T)$.
+The projection onto a spectral-norm ball by clipping the singular values is standard (it is the prox of the indicator of the unitarily invariant set $\{\sigma:\ \max_i\sigma_i\le t\}$).
+\end{proof}
+
+With $W=W(T)=Q+\Qp T$, $G=G(T)=I+T^\top T$ and $P(T)=P_{\col W}=WG^{-1}W^\top$, Theorem~\ref{thm:reduction} becomes
+\begin{equation}\label{eq:reducedT}
+  \boxed{\;\min_{T\in\Tf_\alpha}\ L(T),\qquad
+  L(T)=\norm{B\bigl(I-W G^{-1}W^\top\bigr)}_\Fro^2=\norm B_\Fro^2-\tr\big(WG^{-1}W^\top B^\top B\big),\;}
+\end{equation}
+with the corresponding matrix $B'=BWG^{-1}W^\top$.
+The function $L$ is $C^\infty$ on all of $\R^{(m-n)\times n}$ because $G\succeq I$ is always invertible.
+
+\begin{theorem}[gradient]\label{thm:grad}
+For every $T$, writing $B'(T)=BW G^{-1}W^\top$,
+\begin{equation}
+  \nabla L(T)= -2\,\Qp^\top\big(B-B'(T)\big)^\top B\,W G^{-1}
+  \;=\;-2\,\Qp^\top\big(I-P(T)\big)B^\top B\,WG^{-1}\ \in\R^{(m-n)\times n}.
+\end{equation}
+\end{theorem}
+\begin{proof}
+Write $C=B^\top B$ and $P=WG^{-1}W^\top$, so $L=\tr C-\tr(PC)$. Let $dW=\Qp\,dT$. From $dG=dW^\top W+W^\top dW$ one checks the identity
+\[
+dP = (I-P)\,dW\,G^{-1}W^\top + WG^{-1}\,dW^\top(I-P),
+\]
+(expand the right-hand side using $P W=W$ and $W^\top P=W^\top$). Since $C$ is symmetric,
+\[\tr(C\,dP)=2\tr\big(G^{-1}W^\top C(I-P)\,dW\big)=2\tr\big(G^{-1}W^\top C(I-P)\Qp\,dT\big).\]
+Hence $dL=-\tr(C\,dP)=\langle -2\,\Qp^\top(I-P)CWG^{-1},\,dT\rangle$, which is the claim; the first form follows from $(I-P)C=(B-BP)^\top B=(B-B')^\top B$.
+\end{proof}
+
+\begin{corollary}[optimality conditions]\label{cor:kkt}
+$T^\star\in\Tf_\alpha$ is a stationary point of \eqref{eq:reducedT} iff
+$\langle\nabla L(T^\star),\,T-T^\star\rangle\ge0$ for all $T\in\Tf_\alpha$, iff $T^\star=\Pop\big(T^\star-\eta\nabla L(T^\star)\big)$ for some (equivalently all) $\eta>0$.
+Every global minimiser of \eqref{eq:reducedT} is stationary. If $\norm{T^\star}_2<\tan\alpha$ then stationarity means $\nabla L(T^\star)=0$.
+\end{corollary}
+\begin{proof}
+Standard first-order conditions for minimising a $C^1$ function over a closed convex set.
+\end{proof}
+
+\section{Closed forms in special cases}
+
+\begin{proposition}[$\alpha=0$]
+If $\alpha=0$ then $\Tf_0=\{0\}$ and the unique solution of \eqref{eq:main} is $B'=BP_A=BA(A^\top A)^{-1}A^\top$.
+\end{proposition}
+\begin{proof}
+$T=0$ gives $W=Q$, $G=I$, $P=QQ^\top=P_A$; uniqueness follows from Lemma~\ref{lem:fixedS}.
+\end{proof}
+
+\begin{proposition}[already feasible]\label{prop:feasible}
+Suppose $\rank B=n$ and let $U_B$ be an orthonormal basis of $\row(B)$. Then $B\in\Ff$ iff $\sigma_{\min}(Q^\top U_B)\ge\cos\alpha$, iff $Q^\top B^\top$ is invertible and $\norm{T_B}_2\le\tan\alpha$ where
+\begin{equation}\label{eq:TB}
+ T_B=(\Qp^\top B^\top)(Q^\top B^\top)^{-1}.
+\end{equation}
+In that case $B$ is the unique solution of \eqref{eq:main}.
+\end{proposition}
+\begin{proof}
+$\ker B=\row(B)^\perp$ has dimension $m-n$, so by Lemma~\ref{lem:facts}(b) the constraint is $\theta_{\max}(\row B,\col A)\le\alpha$, which is the same as $\sigma_{\min}(Q^\top U_B)\ge\cos\alpha$.
+By Theorem~\ref{thm:param} with $U_S=B^\top$ this is $\norm{T_B}_2\le\tan\alpha$. Then $B=BP_{\row B}$ with $\row B\in\Sf_\alpha$, so $\ell(\row B)=0$ is the minimum and $B$ is the unique feasible point at distance zero.
+\end{proof}
+
+\begin{proposition}[$n=1$: projection onto a double cone]
+Let $n=1$, $a=A/\norm A\in\R^m$, $b=B^\top\in\R^m\setminus\{0\}$, and let $\varphi=\arccos\big(|a^\top b|/\norm b\big)\in[0,\pi/2]$ be the angle between $b$ and the line $\col(A)$.
+If $\varphi\le\alpha$ then $B'=B$. Otherwise, with $a_\pm=\sign(a^\top b)\,a$ (take $a_+=a$ if $a^\top b=0$), $u=(b-(a^\top b)a)/\norm{b-(a^\top b)a}$,
+\begin{equation}
+  B'^\top \;=\; \norm b\,\cos(\varphi-\alpha)\,\big(\cos\alpha\ a_\pm+\sin\alpha\ u\big).
+\end{equation}
+\end{proposition}
+\begin{proof}
+For $n=1$, $\Ff=\{0\}\cup\{b':\ \angle(b',\pm a)\le\alpha\}$ is the closed double circular cone $K_+\cup K_-$ of half-angle $\alpha$ around $\pm a$, and \eqref{eq:main} is the Euclidean projection of $b$ onto it, i.e.\ the nearer of the projections onto the convex cones $K_\pm$.
+The projection onto the convex cone $K_+=\{x:\ \angle(x,a_+)\le\alpha\}$ is $b$ if $\angle(b,a_+)\le\alpha$, is $0$ if $\angle(b,a_+)\ge\alpha+\pi/2$, and otherwise is obtained by rotating $b$ in the plane $\operatorname{span}(a_+,u)$ towards $a_+$ until the angle equals $\alpha$ and scaling by $\cos(\varphi-\alpha)$. Since $\varphi\le\pi/2<\alpha+\pi/2$ the middle case never occurs for the cone around $a_\pm$, and the cone around $-a_\pm$ is farther away.
+\end{proof}
+
+\begin{remark}[a natural but suboptimal heuristic]\label{rem:clip}
+Given $T_B$ from \eqref{eq:TB}, the point $T_{\rm clip}=\Pop(T_B)$ keeps the principal directions of $\row(B)$ relative to $\col(A)$ and clips each principal angle at $\alpha$. It is feasible and a good initial point, but it is \emph{not} optimal in general: it ignores how the singular values of $B$ are distributed across the principal directions. Numerically, on random instances with $\alpha=0.3$ we observed $L(T_{\rm clip})=15.08$ versus $L(T^\star)=14.13$ for $(m,n)=(10,4)$, and a nonzero projected-gradient residual at $T_{\rm clip}$.
+\end{remark}
+
+\section{Algorithm}
+
+Problem \eqref{eq:reducedT} is a smooth (nonconvex) minimisation over the compact convex set $\Tf_\alpha$ with a cheap projection, so projected gradient descent with an Armijo backtracking line search is natural.
+
+\begin{algorithm}[h]
+\caption{Projected gradient for \eqref{eq:main}}
+\label{alg:pg}
+\begin{algorithmic}[1]
+\Require $A\in\R^{m\times n}$ (rank $n$), $B\in\R^{n\times m}$, $\alpha\in[0,\pi/2)$; parameters $\beta\in(0,1)$ (backtracking), $c\in(0,1)$ (Armijo), tolerance $\varepsilon$.
+\State Compute a full QR of $A$: $Q\in\R^{m\times n}$, $\Qp\in\R^{m\times(m-n)}$; set $t=\tan\alpha$.
+\State \textbf{Initial points:} $T^{(0)}\in\{\Pop(T_B)\ (\text{if }Q^\top B^\top\text{ invertible}),\ 0,\ \Pop(\text{random})\}$; run the loop below from each and keep the best.
+\State $\eta\gets 1$
+\Loop
+  \State $W\gets Q+\Qp T$;\quad $G\gets I+T^\top T$;\quad $B'\gets BWG^{-1}W^\top$;\quad $L\gets\norm{B-B'}_\Fro^2$
+  \State $g\gets -2\,\Qp^\top(B-B')^\top BWG^{-1}$ \Comment{Theorem~\ref{thm:grad}}
+  \Repeat \Comment{Armijo backtracking on the projected step}
+     \State $T_+\gets\Pop(T-\eta g)$;\quad $L_+\gets L(T_+)$
+     \If{$L_+> L-c\,\langle g,\,T-T_+\rangle$}\ $\eta\gets\beta\eta$ \EndIf
+  \Until{$L_+\le L-c\,\langle g,\,T-T_+\rangle$}
+  \If{$\norm{T_+-T}_\Fro\le\varepsilon(1+\norm T_\Fro)$}\ \textbf{break} \EndIf
+  \State $T\gets T_+$;\quad $\eta\gets\min\{2\eta,\ \eta_{\max}\}$
+\EndLoop
+\State \Return $B'=BWG^{-1}W^\top$ with $W,G$ evaluated at the final $T$.
+\end{algorithmic}
+\end{algorithm}
+
+\begin{theorem}[convergence]\label{thm:conv}
+Let $\{T_k\}$ be generated by Algorithm~\ref{alg:pg} from any $T_0\in\Tf_\alpha$ (with $\varepsilon=0$).
+Then $L(T_k)$ is non-increasing, $\norm{T_{k+1}-T_k}_\Fro\to0$, and every limit point of $\{T_k\}$ (at least one exists) is a stationary point of \eqref{eq:reducedT} in the sense of Corollary~\ref{cor:kkt}.
+Moreover, if $\ell_L$ is a Lipschitz constant of $\nabla L$ on $\Tf_\alpha$ (which exists since $L\in C^\infty$ and $\Tf_\alpha$ is compact) and a constant step $\eta\le 1/\ell_L$ is used, then
+\[
+\min_{0\le k<K}\ \norm{T_k-\Pop(T_k-\eta\nabla L(T_k))}_\Fro^2\ \le\ \frac{2\eta\,\big(L(T_0)-\min_{\Tf_\alpha}L\big)}{K}.
+\]
+\end{theorem}
+\begin{proof}
+$L$ is $C^1$ and $\Tf_\alpha$ is closed, convex and bounded; the Armijo rule along the projection arc terminates in finitely many halvings because $\langle g,T-\Pop(T-\eta g)\rangle\ge \norm{T-\Pop(T-\eta g)}^2/\eta>0$ whenever $T$ is not stationary. Under these hypotheses the projected gradient method with Armijo rule along the projection arc has the stated properties; see Bertsekas, \emph{Nonlinear Programming}, Prop.\ 2.3.3 (and Prop.\ 2.3.2 for the constant-step case, which also gives the $O(1/K)$ bound on the squared gradient-mapping norm by telescoping the descent inequality $L(T_{k+1})\le L(T_k)-\tfrac{1}{2\eta}\norm{T_{k+1}-T_k}^2$).
+\end{proof}
+
+\begin{remark}[cost]
+Each iteration costs $O(mn^2)$ for the products with $W$, $O(n^3)$ for solves with $G$, and $O((m-n)n^2)$ for the SVD of $T$ in $\Pop$; nothing of size $m\times m$ is formed. Since $L$ is nonconvex, a few restarts (Algorithm~\ref{alg:pg}, line~2) are used and the best stationary point is returned.
+\end{remark}
+
+\section{A convex relaxation and a certificate of optimality}
+
+\begin{proposition}[SDP lower bound]\label{prop:sdp}
+Let
+\begin{equation}
+  v^{\rm SDP}=\max\Big\{\tr(PB^\top B):\ P\in\R^{m\times m},\ P=P^\top,\ 0\preceq P\preceq I,\ \tr P=n,\ \norm{P-P_A}_2\le\sin\alpha\Big\}.
+\end{equation}
+Then $\min_{B'\in\Ff}\norm{B'-B}_\Fro^2\ \ge\ \norm B_\Fro^2-v^{\rm SDP}$.
+If a maximiser $P^\star$ is a rank-$n$ orthogonal projector, the bound is tight and $B'=BP^\star$ is a global solution of \eqref{eq:main}.
+\end{proposition}
+\begin{proof}
+For $S\in\Sf_\alpha$, $P_S$ is feasible for the SDP: it is a projector with trace $n$ and, by Lemma~\ref{lem:facts}(b), $\norm{P_S-P_A}_2=\sin\theta_{\max}(S,\col A)\le\sin\alpha$. Hence $v^{\rm SDP}\ge\max_{S\in\Sf_\alpha}\tr(P_SB^\top B)$ and the claim follows from \eqref{eq:reduced}. The tightness statement is immediate.
+\end{proof}
+This gives a computable gap $L(T^\star)-\big(\norm B^2_\Fro-v^{\rm SDP}\big)\ge0$ for any point returned by Algorithm~\ref{alg:pg}; a zero gap certifies global optimality.
+
+\section{Summary}
+
+The solution of \eqref{eq:main} is $B'=BP_{S^\star}$ where $S^\star=\col(Q+\Qp T^\star)$ and $T^\star$ solves
+\[
+\min_{\norm T_2\le\tan\alpha}\ \norm{B\big(I-(Q+\Qp T)(I+T^\top T)^{-1}(Q+\Qp T)^\top\big)}_\Fro^2 .
+\]
+For $\alpha=0$ this is $BP_A$; if $B$ is already feasible it is $B$; for $n=1$ it is a cone projection; in general it is computed by projected gradient descent (Algorithm~\ref{alg:pg}), converging to a stationary point, with Proposition~\ref{prop:sdp} available as an optimality certificate.
+
+\end{document}

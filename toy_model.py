@@ -123,8 +123,12 @@ class MultiHeadAttention(nn.Module):
         value = value.unflatten(-1, [self.nheads, self.dim_head]).transpose(1, 2)
 
         # (N, nheads, L_t, E_head)
+        if self.training:
+            dropout = self.dropout
+        else:
+            dropout = 0.0
         attn_output = F.scaled_dot_product_attention(
-            query, key, value, dropout_p=self.dropout, is_causal=is_causal, attn_mask=attn_mask
+            query, key, value, dropout_p=dropout, is_causal=is_causal, attn_mask=attn_mask
         )
         # (N, nheads, L_t, E_head) -> (N, L_t, nheads, E_head) -> (N, L_t, E_total)
         attn_output = attn_output.transpose(1, 2).flatten(-2)

@@ -51,7 +51,7 @@ def accuracy(model, loader, meta, device):
             for i in range(x.shape[0]//(2**15)):
                 pred = model(x[i*2**15:(i+1)*2**15])[:, meta.target_pos, :].argmax(-1)
                 correct += (pred == y[i*2**15:(i+1)*2**15]).sum().item()
-                total   += y.numel()
+                total   += y[i*2**15:(i+1)*2**15].numel()
         else:
             pred = model(x)[:, meta.target_pos, :].argmax(-1)
             correct += (pred == y).sum().item()
@@ -60,10 +60,10 @@ def accuracy(model, loader, meta, device):
 
 
 def run(config: RunConfig, logger=None):
-    torch.manual_seed(config.seed)
     
-    train_loader, test_loader, meta = make_dataset(config.task, **config.task_kwargs, seed=int(config.seed))
+    train_loader, test_loader, meta = make_dataset(config.task, **config.task_kwargs, seed=0)
 
+    torch.manual_seed(config.seed)
 
     model = Transformer(
         dim= config.dim,
@@ -86,11 +86,12 @@ def run(config: RunConfig, logger=None):
     metrics = {
             "accuracy": [],
             "losses": [],
-            "collapses": [],
             "log_freq": config.log_freq
         }
     if config.track_activations:
-        metrics["realised_p"] = [[]]*len(model.layers)
+        metrics["realised_p"] = [[] for _ in model.layers]
+    else:
+        metrics["collapses"] = [[] for _ in model.layers]
     
     if len(train_loader) == 1:
         train_loader = [x for x in train_loader]
@@ -115,10 +116,7 @@ def run(config: RunConfig, logger=None):
                 acc = accuracy(model, train_loader, meta, config.device)
             else:
                 acc = accuracy(model, test_loader, meta, config.device)
-            
-            up_proj = model.layers[0].ffn.l1.weight
-            up_proj_b = model.layers[0].ffn.l1.bias
-            down_proj = model.layers[0].ffn.l2.weight
+
             
             logger.log(f"Loss at Epoch {epoch+1}: {loss.mean().item():.5f}")
             logger.log(f"Accuracy at Epoch {epoch+1}: {acc:.2%}")
@@ -145,20 +143,26 @@ def run(config: RunConfig, logger=None):
                     logger.log(f"p Realised collapsed pairs {epoch+1}: {realised_pairs_collapsed/math.comb(R,2):.2%}")
                     metrics["realised_p"][b_idx].append(realised_pairs_collapsed/math.comb(R,2))
                     
+            else:
+                for b_idx, realized in enumerate(realized_blocks):
+                    up_proj = model.layers[b_idx].ffn.l1.weight
+                    up_proj_b = model.layers[b_idx].ffn.l1.bias
+                    down_proj = model.layers[b_idx].ffn.l2.weight
+                    with torch.no_grad():
+                        sample_prop = 0.01
+                        pairs_collapsed, R = find_n_pairs_collapsing_torch(up_proj.detach(),
+                                                                up_proj_b.detach(),
+                                                                down_proj.detach(),
+                                                                alpha_check=sample_prop,
+                                                                verbose=False)
+                    logger.log(f"Num Collapsed pairs {epoch+1}: {int(pairs_collapsed/sample_prop)}")
+                    logger.log(f"p Collapsed pairs {epoch+1}: {pairs_collapsed/math.comb(R,2):.2%}")
+                    metrics["collapses"][b_idx].append(pairs_collapsed)
             
-            with torch.no_grad():
-                sample_prop = 0.01
-                pairs_collapsed, R = find_n_pairs_collapsing_torch(up_proj.detach(), 
-                                                          up_proj_b.detach(), 
-                                                          down_proj.detach(), 
-                                                          alpha_check=sample_prop,
-                                                          verbose=False)
-            logger.log(f"Num Collapsed pairs {epoch+1}: {int(pairs_collapsed/sample_prop)}")
-            logger.log(f"p Collapsed pairs {epoch+1}: {realised_pairs_collapsed/math.comb(R,2):.2%}")
             print()
             metrics["accuracy"].append(acc)
             metrics["losses"].append(loss.mean().item())
-            metrics["collapses"].append(pairs_collapsed)
+            
 
     return metrics, model, logger
     
@@ -190,10 +194,9 @@ def main():
     for gamma in [1]:
         run_metrics = {}
         config = RunConfig(
-                    task = "kv",
+                    task = "kv_seq",
                     task_kwargs= {
-                                "n_keys": 2**15
-                                
+                                "n_keys": 2**14
                             },
                     low_collapse_init=True,
                     seed = 0,
@@ -216,16 +219,21 @@ def main():
         
         accuracies = [run_metrics[seed]["accuracy"] for seed in seeds]
         losses = [run_metrics[seed]["losses"] for seed in seeds]
-        collapses = [run_metrics[seed]["collapses"] for seed in seeds]
-        realised_p = [run_metrics[seed]["realised_p"][0] for seed in seeds]
         
-        create_graphs(accuracies, collapses, "accuracy", "collapses", None, config.file_name("figs", include_seed=True), config.log_freq)
-        create_graphs(accuracies, realised_p, "accuracy", "realised p collapses", None, config.file_name("figs", include_seed=True), config.log_freq)
-        create_graphs(losses, realised_p, "losses", "realised p collapses", None, config.file_name("figs", include_seed=True), config.log_freq)
+        if config.track_activations:
+            realised_p = [run_metrics[seed]["realised_p"][0] for seed in seeds]
+            create_graphs(accuracies, realised_p, "accuracy", "realised p collapses", None, config.file_name("figs", include_seed=True), config.log_freq)
+            create_graphs(losses, realised_p, "losses", "realised p collapses", None, config.file_name("figs", include_seed=True), config.log_freq)
+            run_idx=0
+            realised_p_per_layer = [run_metrics[seeds[run_idx]]["realised_p"][b_idx] for b_idx in range(config.n_layers)]        
+            create_graphs(accuracies[run_idx], realised_p_per_layer, "accuracy", "realised p collapses per block", None, config.file_name("figs", include_seed=True), config.log_freq)
+        else:
+            collapses = [run_metrics[seed]["collapses"][0] for seed in seeds]
+            create_graphs(accuracies, collapses, "accuracy", "collapses", None, config.file_name("figs", include_seed=True), config.log_freq)
+            run_idx = 0
+            collapses_per_layer = [run_metrics[seeds[run_idx]]["collapses"][b_idx] for b_idx in range(config.n_layers)]        
+            create_graphs(accuracies[run_idx], collapses_per_layer, "accuracy", "collapses per block", None, config.file_name("figs", include_seed=True), config.log_freq)
         
-        realised_p_per_layer = [run_metrics[seed[0]]["realised_p"][b_idx] for b_idx in config.n_layers]
-        
-        create_graphs(accuracies[0], realised_p_per_layer, "accuracy", "realised p collapses per block", None, config.file_name("figs", include_seed=True), config.log_freq)
         
         
         

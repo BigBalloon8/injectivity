@@ -1,0 +1,312 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+
+\numberwithin{equation}{section}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\R}{\mathbb{R}}
+\DeclareMathOperator{\ReLU}{ReLU}
+\DeclareMathOperator{\col}{col}
+\DeclareMathOperator{\rank}{rank}
+\DeclareMathOperator{\rec}{rec}
+\DeclareMathOperator{\conv}{conv}
+\DeclareMathOperator{\cone}{cone}
+\DeclareMathOperator{\diag}{diag}
+\DeclareMathOperator{\supp}{supp}
+\DeclareMathOperator{\dist}{dist}
+\DeclareMathOperator{\Gr}{Gr}
+\newcommand{\norm}[1]{\lVert #1\rVert}
+\newcommand{\ip}[2]{\langle #1,\,#2\rangle}
+\newcommand{\Kal}{K_{\alpha}}
+
+\title{Injectivity of the Down-Projection on the ReLU Image,\\ and Its Stability under Perturbation of the Kernel}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+In a transformer feed-forward block $x\mapsto B\,\ReLU(Ax+c)$ with up-projection $A\in\R^{m\times n}$ ($m>n$) and down-projection $B\in\R^{n\times m}$, the map $B$ is injective on the ReLU image $S=\{\ReLU(Ax+c):x\in\R^n\}$ whenever $\ker(B)\subseteq\ker(A^{\top})$. We show that this injectivity is stable under perturbation of $B$, and that the correct quantitative statement is angular: there is a critical angle $\alpha=\alpha(A,c)<\pi/2$, intrinsic to the pair $(A,c)$, such that any full-rank $B'$ whose kernel makes a largest principal angle less than $\pi/2-\alpha$ with $\ker(A^{\top})$ remains injective on $S$, and this threshold is sharp. An explicit safe radius $\varepsilon^{*}=\sigma_{n}(B)\cos\alpha/\norm{G}_{2}$ follows for perturbations $B'=B+\varepsilon G$.
+\end{abstract}
+
+\section{Setting and the aligned case}\label{sec:aligned}
+
+Throughout, $m>n\ge 1$, $A\in\R^{m\times n}$ has $\rank(A)=n$, $c\in\R^m$, and $\rho:=\ReLU$ acts componentwise, $\rho(t)=\max(t,0)$. Write $a_i^{\top}$ for the $i$-th row of $A$. Set
+\[
+S \;:=\; \{\rho(Ax+c) : x\in\R^n\}\subset\R^m .
+\]
+A matrix $B'\in\R^{n\times m}$ is \emph{injective on $S$} if $B's_1=B's_2$ with $s_1,s_2\in S$ implies $s_1=s_2$; equivalently, $\bigl|\{s\in S: B's=y\}\bigr|=1$ for every $y\in B'S$.
+
+\begin{lemma}[Firm nonexpansiveness of ReLU]\label{lem:firm}
+For all $u,v\in\R^m$,
+\begin{equation}\label{eq:firm}
+\ip{\rho(u)-\rho(v)}{u-v}\;\ge\;\norm{\rho(u)-\rho(v)}^2,
+\end{equation}
+and the inequality holds componentwise: $(\rho(u_i)-\rho(v_i))(u_i-v_i)\ge(\rho(u_i)-\rho(v_i))^2$ for each $i$.
+\end{lemma}
+
+\begin{proof}
+Write the scalar identity $t=\rho(t)+\nu(t)$ with $\nu(t):=\min(t,0)$. For $a,b\in\R$,
+\[
+(\rho(a)-\rho(b))(a-b)\;=\;(\rho(a)-\rho(b))^2+(\rho(a)-\rho(b))(\nu(a)-\nu(b)).
+\]
+Both $\rho$ and $\nu$ are nondecreasing, so $\rho(a)-\rho(b)$ and $\nu(a)-\nu(b)$ each carry the same weak sign as $a-b$; their product is therefore nonnegative, which gives the scalar inequality. Summing over coordinates gives \eqref{eq:firm}.
+\end{proof}
+
+\begin{remark}
+Firm nonexpansiveness implies, via Cauchy--Schwarz, the ordinary nonexpansiveness $\norm{\rho(u)-\rho(v)}\le\norm{u-v}$, but is strictly stronger---and the stronger form is what the arguments below use.
+\end{remark}
+\newpage
+\begin{proposition}[Aligned case]\label{prop:aligned}
+If $\ker(B)\subseteq\col(A)^{\perp}=\ker(A^{\top})$, then $B$ is injective on $S$.
+\end{proposition}
+
+\begin{proof}
+Let $s_1=\rho(Ax_1+c)$, $s_2=\rho(Ax_2+c)$, and suppose $Bs_1=Bs_2$. Then $d:=s_1-s_2\in\ker(B)\subseteq\col(A)^{\perp}$. Applying Lemma~\ref{lem:firm} with $u=Ax_1+c$ and $v=Ax_2+c$, so that $u-v=A(x_1-x_2)\in\col(A)$,
+\[
+\norm{d}^2\;\le\;\ip{d}{A(x_1-x_2)}\;=\;0 ,
+\]
+the inner product vanishing because $d\perp\col(A)$. Hence $d=0$, i.e.\ $s_1=s_2$.
+\end{proof}
+
+\begin{remark}\label{rem:hypotheses}
+Only the inclusion $\ker(B)\subseteq\col(A)^{\perp}$ is used; the hypotheses $c\ne 0$, $\rank(B)=n$, and the reverse inclusion play no role. The full equality $\ker(B)=\ker(A^{\top})$ (which forces $\rank(B)=n$, since $\dim\ker(A^{\top})=m-n$) is the natural ``aligned'' configuration; Theorem~\ref{thm:angle} below recovers Proposition~\ref{prop:aligned} as its zero-angle case.
+\end{remark}
+
+\section{Stability under perturbation of the kernel}\label{sec:stability}
+
+\subsection{Notation}
+
+Set $V_0:=\ker(A^{\top})=\col(A)^{\perp}$, so $\dim V_0=m-n$. Let $P$ denote the orthogonal projector onto $\col(A)$ and, for a subspace $W$, let $P_W$ denote the orthogonal projector onto $W$. For $z\ne 0$ define
+\[
+\angle(z,W)\;:=\;\arccos\frac{\norm{P_W z}}{\norm{z}}\;\in\;[0,\pi/2].
+\]
+Since $\R^m=\col(A)\oplus^{\perp}V_0$, every unit vector $z$ satisfies $\norm{Pz}^2+\norm{P_{V_0}z}^2=1$, whence
+\begin{equation}\label{eq:complementary}
+\angle(z,\col A)+\angle(z,V_0)\;=\;\frac{\pi}{2}.
+\end{equation}
+
+For subspaces $V,W\subseteq\R^m$ of equal dimension $r\ge 1$ with orthonormal basis matrices $U_V,U_W\in\R^{m\times r}$, the \emph{principal angles} $0\le\theta_1\le\dots\le\theta_r\le\pi/2$ are defined by $\cos\theta_i=\sigma_i(U_W^{\top}U_V)$, the singular values in decreasing order \cite[\S 6.4.3]{GVL}. We write $\theta_{\max}(V,W):=\theta_r$; this quantity is a metric on the Grassmannian $\Gr(r,\R^m)$.
+
+Define the \emph{difference set}
+\[
+D\;:=\;\{s_1-s_2 : s_1,s_2\in S,\ s_1\ne s_2\}.
+\]
+For any $B'\in\R^{n\times m}$, directly from the definitions,
+\begin{equation}\label{eq:kernelD}
+B'\ \text{is injective on}\ S \iff \ker(B')\cap D=\emptyset ,
+\end{equation}
+so membership in the injective set $\mathcal I:=\{B'\in\R^{n\times m}: \ker(B')\cap D=\emptyset\}$ depends on $B'$ only through the position of its kernel relative to the fixed set $D$. Note $D=-D$.
+
+By Lemma~\ref{lem:firm}, every $d=\rho(Ax_1+c)-\rho(Ax_2+c)\in D$ satisfies, with $\delta:=x_1-x_2$,
+\begin{equation}\label{eq:pointwise}
+\ip{d}{A\delta}\;\ge\;\norm{d}^2\;>\;0 ,
+\end{equation}
+hence $Pd\ne 0$, i.e.\ $\angle(d,\col A)<\pi/2$ \emph{pointwise}. Pointwise strictness is not yet a perturbation bound: the supremum of these angles over the noncompact set $D$ could a priori equal $\pi/2$. Ruling this out is the technical heart of the matter.
+
+\subsection{The critical angle}
+
+\begin{lemma}[Critical angle]\label{lem:critical}
+Let
+\[
+\alpha\;:=\;\sup_{d\in D}\angle(d,\col A).
+\]
+Then $\alpha<\pi/2$. Equivalently, $\cos\alpha=\inf_{d\in D}\norm{Pd}/\norm{d}>0$, and $D$ is contained in the closed circular cone
+\[
+\Kal\;:=\;\bigl\{z\in\R^m : \norm{Pz}\ge\norm{z}\cos\alpha\bigr\}
+\]
+of half-angle $\alpha$ about $\col(A)$.
+\end{lemma}
+
+\begin{proof}
+\emph{Step 1: polyhedral decomposition.}
+For sign patterns $\sigma,\tau\in\{0,1\}^m$ put $D_\sigma:=\diag(\sigma)$ and let
+\[
+P_{\sigma\tau}:=\Bigl\{(x_1,x_2)\in\R^n\times\R^n :\ (2\sigma_i-1)(a_i^{\top}x_1+c_i)\ge 0,\ \ (2\tau_i-1)(a_i^{\top}x_2+c_i)\ge 0,\ \ 1\le i\le m\Bigr\},
+\]
+a closed convex polyhedron, and define the affine map
+\[
+L_{\sigma\tau}(x_1,x_2):=D_\sigma(Ax_1+c)-D_\tau(Ax_2+c),
+\qquad
+\bar L_{\sigma\tau}(\dot x_1,\dot x_2):=D_\sigma A\dot x_1-D_\tau A\dot x_2
+\]
+($\bar L_{\sigma\tau}$ being the linear part of $L_{\sigma\tau}$). On $P_{\sigma\tau}$ the sign constraints force $D_\sigma(Ax_1+c)=\rho(Ax_1+c)$ and $D_\tau(Ax_2+c)=\rho(Ax_2+c)$ coordinatewise, and every pair $(x_1,x_2)$ lies in at least one $P_{\sigma\tau}$. Hence
+\[
+D\cup\{0\}\;=\;\bigcup_{\sigma,\tau\in\{0,1\}^m} Q_{\sigma\tau},
+\qquad Q_{\sigma\tau}:=L_{\sigma\tau}(P_{\sigma\tau}),
+\]
+a \emph{finite} union of closed convex polyhedra (an affine image of a polyhedron is a polyhedron).
+
+\emph{Step 2: the compactified direction set.}
+Let
+\[
+\Sigma\;:=\;\overline{\{\,d/\norm{d} : d\in D\,\}}\subset S^{m-1},
+\]
+a compact subset of the unit sphere, and let
+\[
+D_0\;:=\;\{\rho(Au)-\rho(Av) : u,v\in\R^n\}\setminus\{0\}
+\]
+be the homogeneous ($c=0$) difference set. We claim every $z\in\Sigma$ is the direction of an element of $D\cup D_0$.\\
+\\
+Let $z_k:=d_k/\norm{d_k}\to z$ with $d_k\in D$. Since there are finitely many pieces, after passing to a subsequence all $d_k$ lie in a single $Q:=Q_{\sigma\tau}$, and $\norm{d_k}\to\ell\in[0,\infty]$.\\
+\\
+\emph{Case $\ell\in(0,\infty)$.} Then $d_k\to\ell z\in Q$ ($Q$ is closed) and $\ell z\ne 0$, so $\ell z\in D$.\\
+\\
+\emph{Case $\ell=0$.} Then $0\in Q$. Write $Q=\{y:\ip{g_j}{y}\le b_j,\ j\in J\}$ with $J$ finite; $0\in Q$ gives $b_j\ge 0$ for all $j$. For each $j$ with $b_j=0$ we have $\ip{g_j}{z_k}=\ip{g_j}{d_k}/\norm{d_k}\le 0$, hence $\ip{g_j}{z}\le 0$ in the limit. Choose $t>0$ small enough that $t\,\ip{g_j}{z}\le b_j$ for the (finitely many) $j$ with $b_j>0$. Then $tz\in Q\setminus\{0\}\subseteq D$, and $z$ is the direction of $tz$.\\
+\\
+\emph{Case $\ell=\infty$.} Since $Q$ is closed and convex, $d_k\in Q$ with $\norm{d_k}\to\infty$ and $d_k/\norm{d_k}\to z$ imply $z\in\rec(Q)$, the recession cone \cite[Thm.~8.2]{Rock}. By Minkowski--Weyl, write $P_{\sigma\tau}=\conv(V)+\cone(R)$ with $V,R$ finite; then
+\[
+Q=\conv\bigl(L_{\sigma\tau}(V)\bigr)+\cone\bigl(\bar L_{\sigma\tau}(R)\bigr),
+\qquad\text{hence}\qquad
+\rec(Q)=\bar L_{\sigma\tau}\bigl(\rec(P_{\sigma\tau})\bigr).
+\]
+The recession cone $\rec(P_{\sigma\tau})$ is cut out by the \emph{homogeneous} constraints $(2\sigma_i-1)\,a_i^{\top}\dot x_1\ge 0$ and $(2\tau_i-1)\,a_i^{\top}\dot x_2\ge 0$, under which $D_\sigma A\dot x_1=\rho(A\dot x_1)$ and $D_\tau A\dot x_2=\rho(A\dot x_2)$ coordinatewise. Therefore $z=\rho(A\dot x_1)-\rho(A\dot x_2)$ for some $(\dot x_1,\dot x_2)$, and $z\ne 0$ (it is a unit vector), so $z\in D_0$. This proves the claim.
+
+\emph{Step 3: compactness.}
+The function $z\mapsto\norm{Pz}$ is continuous on the compact set $\Sigma$ and strictly positive at every point of $\Sigma$: if $z=d/\norm{d}$ with $d\in D$ this is \eqref{eq:pointwise}; if $z=w/\norm{w}$ with $w=\rho(Au)-\rho(Av)\in D_0$, the identical computation via Lemma~\ref{lem:firm} (with $c$ absent) gives $\ip{w}{A(u-v)}\ge\norm{w}^2>0$, so $Pw\ne 0$. Consequently
+\[
+\cos\alpha\;=\;\inf_{d\in D}\frac{\norm{Pd}}{\norm{d}}\;=\;\min_{z\in\Sigma}\norm{Pz}\;>\;0 . \qedhere
+\]
+\end{proof}
+
+\begin{remark}\label{rem:homogeneous}
+The homogeneous directions genuinely occur as limits: for $t>0$,
+\[
+\rho\bigl(A(tu)+c\bigr)-\rho\bigl(A(tv)+c\bigr)\;=\;t\Bigl(\rho\bigl(Au+\tfrac{c}{t}\bigr)-\rho\bigl(Av+\tfrac{c}{t}\bigr)\Bigr),
+\]
+whose direction converges, as $t\to\infty$, to that of $\rho(Au)-\rho(Av)$ whenever the latter is nonzero. Thus $\Sigma$ is \emph{exactly} the set of directions of $D\cup D_0$, and in particular $\alpha(A,c)\ge\alpha(A,0)$.
+\end{remark}
+
+\subsection{The principal-angle bound}
+
+\begin{lemma}[Largest principal angle as worst-case vector angle]\label{lem:worst}
+Let $V,W\subseteq\R^m$ with $\dim V=\dim W=r\ge 1$ and principal angles $\theta_1\le\dots\le\theta_r$. Then
+\[
+\max_{0\ne z\in V}\angle(z,W)\;=\;\theta_r\;=\;\theta_{\max}(V,W).
+\]
+\end{lemma}
+
+\begin{proof}
+Let $U_V,U_W\in\R^{m\times r}$ be orthonormal basis matrices and $M:=U_W^{\top}U_V$, whose singular values are $\cos\theta_1\ge\dots\ge\cos\theta_r$. For a unit vector $z=U_V y$ (so $\norm{y}=1$),
+\[
+\norm{P_W z}=\norm{U_W U_W^{\top}z}=\norm{U_W^{\top}z}=\norm{My}\;\ge\;\sigma_{\min}(M)=\cos\theta_r ,
+\]
+with equality when $y$ is a right singular vector of $M$ for $\sigma_{\min}$. Applying the decreasing map $\arccos$ gives the claim.
+\end{proof}
+
+\begin{theorem}[Principal-angle bound]\label{thm:angle}
+Let $B'\in\R^{n\times m}$ with $\rank(B')=n$, and let $\theta_{\max}:=\theta_{\max}\bigl(\ker(B'),V_0\bigr)$. If
+\[
+\theta_{\max}\;<\;\frac{\pi}{2}-\alpha ,
+\]
+then $B'$ is injective on $S$.
+\end{theorem}
+
+\begin{proof}
+Since $\rank(B')=n$ we have $\dim\ker(B')=m-n=\dim V_0$, so Lemma~\ref{lem:worst} applies. Let $z\in\ker(B')$ be any unit vector. Then $\angle(z,V_0)\le\theta_{\max}<\pi/2-\alpha$, so by \eqref{eq:complementary}, $\angle(z,\col A)>\alpha$, i.e.\ $\norm{Pz}<\cos\alpha$; hence $z\notin\Kal$. Since $\Kal$ is invariant under positive scaling and $D\subseteq\Kal$ (Lemma~\ref{lem:critical}), no nonzero element of $\ker(B')$ lies in $D$, i.e.\ $\ker(B')\cap D=\emptyset$. By \eqref{eq:kernelD}, $B'$ is injective on $S$.
+\end{proof}
+
+Taking $\ker(B')=V_0$ gives $\theta_{\max}=0$ and recovers Proposition~\ref{prop:aligned}. Note that the base matrix $B$ never enters: the guarantee describes a ball of radius $\pi/2-\alpha$ around $V_0$ in the Grassmannian $\Gr(m-n,\R^m)$, in the largest-principal-angle metric. The next result shows no larger radius works.
+
+\begin{theorem}[Sharpness]\label{thm:sharp}
+For every $\theta$ with $\pi/2-\alpha<\theta\le\pi/2$ there exists $B'\in\R^{n\times m}$ of rank $n$ with $\theta_{\max}(\ker(B'),V_0)<\theta$ that is \emph{not} injective on $S$. Consequently $\pi/2-\alpha$ is the largest radius $R$ such that every rank-$n$ matrix whose kernel lies within largest-principal-angle distance less than $R$ of $V_0$ is injective on $S$.
+\end{theorem}
+
+\begin{proof}
+Since $\pi/2-\theta<\alpha=\sup_{d\in D}\angle(d,\col A)$, choose $d\in D$ with $\angle(d,\col A)>\pi/2-\theta$. By \eqref{eq:complementary},
+\[
+\beta:=\angle(d,V_0)<\theta\le\frac{\pi}{2},
+\]
+so $p:=P_{V_0}d\ne 0$. Set $W:=V_0\cap p^{\perp}$, of dimension $m-n-1$, and
+\[
+V':=\mathrm{span}(d)\oplus W .
+\]
+The sum is orthogonal: for $w\in W$, $\ip{d}{w}=\ip{p}{w}+\ip{Pd}{w}=0+0$, since $w\perp p$ and $w\in V_0\perp\col(A)$. Hence $\dim V'=m-n$.
+
+Choose adapted orthonormal bases $U_{V'}=[\,d/\norm{d}\;\; U_W\,]$ and $U_{V_0}=[\,p/\norm{p}\;\; U_W\,]$, where the columns of $U_W$ form an orthonormal basis of $W$. Using $\ip{p}{d}=\ip{p}{p+Pd}=\norm{p}^2$, so that $\bigl\langle p/\norm{p},\,d/\norm{d}\bigr\rangle=\norm{p}/\norm{d}=\cos\beta$, and the orthogonality relations $U_W^{\top}d=0$, $U_W^{\top}p=0$, we get
+\[
+U_{V_0}^{\top}U_{V'}=\begin{pmatrix}\cos\beta & 0\\ 0 & I_{m-n-1}\end{pmatrix},
+\]
+whose singular values are $\{\cos\beta,1,\dots,1\}$. The principal angles between $V'$ and $V_0$ are therefore $\beta$ together with $m-n-1$ zeros, so $\theta_{\max}(V',V_0)=\beta<\theta$.
+
+Finally take any $B'$ of rank $n$ with $\ker(B')=V'$ (e.g.\ with rows an orthonormal basis of $(V')^{\perp}$). Writing $d=s_1-s_2$ with $s_1\ne s_2\in S$, we get $B's_1=B's_2$, so $B'$ is not injective on $S$.
+\end{proof}
+
+\subsection{An explicit perturbation radius}
+
+\begin{corollary}[Safe radius for $B'=B+\varepsilon G$]\label{cor:radius}
+Let $B\in\R^{n\times m}$ with $\rank(B)=n$ and $\ker(B)=V_0$, let $G\in\R^{n\times m}$ with $G\ne 0$, and let $\sigma_n(B)>0$ denote the smallest singular value of $B$ and $\norm{G}_2$ the spectral norm. If
+\[
+0\le\varepsilon<\varepsilon^{*}:=\frac{\sigma_n(B)}{\norm{G}_2}\,\cos\alpha ,
+\]
+then $B':=B+\varepsilon G$ has rank $n$ and is injective on $S$.
+\end{corollary}
+
+\begin{proof}
+By Weyl's inequality for singular values, $\sigma_n(B')\ge\sigma_n(B)-\varepsilon\norm{G}_2>0$ (using $\cos\alpha\le 1$), so $\rank(B')=n$ and $\dim\ker(B')=m-n$.
+
+Let $z\in\ker(B')$ be a unit vector. Then $Bz=-\varepsilon Gz$, so $\norm{Bz}\le\varepsilon\norm{G}_2$. Decompose $z=p+q$ with $p\in V_0=\ker(B)$ and $q\in V_0^{\perp}=\mathrm{row}(B)$, on which $B$ is bounded below by its smallest singular value; then
+\[
+\varepsilon\norm{G}_2\;\ge\;\norm{Bz}=\norm{Bq}\;\ge\;\sigma_n(B)\,\norm{q}.
+\]
+Since $\norm{p}^2+\norm{q}^2=1$, we have $\sin\angle(z,V_0)=\sqrt{1-\norm{P_{V_0}z}^2}=\norm{q}$, so for every unit $z\in\ker(B')$,
+\[
+\sin\angle(z,V_0)\;\le\;\frac{\varepsilon\norm{G}_2}{\sigma_n(B)}\;<\;\cos\alpha\;=\;\sin\Bigl(\frac{\pi}{2}-\alpha\Bigr).
+\]
+Maximizing over unit $z\in\ker(B')$ and applying Lemma~\ref{lem:worst} gives $\sin\theta_{\max}<\sin(\pi/2-\alpha)$; since $\sin$ is increasing on $[0,\pi/2]$, $\theta_{\max}<\pi/2-\alpha$. Theorem~\ref{thm:angle} concludes.
+\end{proof}
+
+Thus the kernel tilts at rate at most $\norm{G}_2/\sigma_n(B)$ in $\sin\theta_{\max}$ per unit $\varepsilon$, and the total angular budget before the guarantee expires is exactly $\cos\alpha$.
+
+\subsection{Remarks}
+
+\begin{remark}[Determinism]
+Below $\varepsilon^{*}$, injectivity is \emph{certain}, not merely likely. Probabilistic language would become appropriate only in quantifying how often a \emph{random} perturbation beyond the threshold destroys injectivity.
+\end{remark}
+
+\begin{remark}[Beyond the threshold]\label{rem:beyond}
+By Theorem~\ref{thm:sharp}, non-injective matrices exist at every angle beyond $\pi/2-\alpha$; but not every matrix there fails. The directions of $D$ form a thin, generally non--circularly-symmetric subset of $\Kal$, and a strongly tilted kernel can still avoid them. In fact, for rank-$n$ matrices $B'$,
+\[
+\ker(B')\cap\Kal=\{0\}
+\iff
+\theta_{\max}\bigl(\ker(B'),V_0\bigr)<\frac{\pi}{2}-\alpha :
+\]
+the forward implication of Theorem~\ref{thm:angle}'s proof gives ($\Leftarrow$), and conversely, if $\theta_{\max}\ge\pi/2-\alpha$ then by Lemma~\ref{lem:worst} there is a unit $z\in\ker(B')$ with $\angle(z,V_0)=\theta_{\max}\ge\pi/2-\alpha$, hence $\angle(z,\col A)\le\alpha$ and $z\in\Kal$. Theorem~\ref{thm:angle} is therefore the \emph{optimal} certificate obtainable from angle information alone: the monotone picture ``increase the angle and eventually lose injectivity'' is correct for the certificate, not for injectivity itself.
+\end{remark}
+
+\begin{remark}[The injective set is not open]\label{rem:notopen}
+Suppose $\ker(B')$ meets no direction of $D$ but contains a \emph{limit} direction $z\in\Sigma$ (necessarily arising from $D_0$; cf.\ Remark~\ref{rem:homogeneous}). Then $B'\in\mathcal I$, yet arbitrarily small perturbations destroy injectivity: pick $d_k\in D$ with $d_k/\norm{d_k}\to z$, rotations $R_k\to I$ with $R_k z=d_k/\norm{d_k}$, and set $B'_k:=B'R_k^{-1}$; then $B'_k\to B'$ and $\ker(B'_k)=R_k\ker(B')\ni d_k/\norm{d_k}$, so $B'_k d_k=0$ and $B'_k\notin\mathcal I$. Conversely, on the open set of rank-$n$ matrices the kernel varies continuously in $\Gr(m-n,\R^m)$, and $\Sigma$ is compact, so $\{B' : \rank(B')=n,\ \ker(B')\cap\Sigma=\emptyset\}$ is open and contained in $\mathcal I$ (directions of $D$ lie in $\Sigma$). Hence the interior of $\mathcal I$ within the rank-$n$ matrices is exactly $\{\ker(B')\cap\Sigma=\emptyset\}$, and the ball of Theorem~\ref{thm:angle} lies inside it.
+\end{remark}
+
+\begin{remark}[The constant $\cos\alpha$]\label{rem:constant}
+By definition,
+\[
+\cos\alpha\;=\;\inf_{\substack{s_1,s_2\in S\\ s_1\ne s_2}}\frac{\norm{P(s_1-s_2)}}{\norm{s_1-s_2}} ,
+\]
+a restricted-injectivity constant of the pair $(A,c)$ in the spirit of restricted isometry. By the proof of Lemma~\ref{lem:critical} the infimum is attained as a minimum over the compact set $\Sigma$, which decomposes into at most $4^m$ polyhedral pieces; it is therefore computable in principle.
+
+For $n=1$, writing $A=a\in\R^m$ and $\delta:=x_1-x_2\ne 0$, the bound is explicit. Each coordinate $d_i=\rho(a_ix_1+c_i)-\rho(a_ix_2+c_i)$ vanishes when $a_i=0$ and, since $\rho$ is nondecreasing, carries the same weak sign as $a_i\delta$; hence $d_i\,a_i\delta=\lvert d_i\rvert\,\lvert a_i\rvert\,\lvert\delta\rvert$ and
+\[
+\norm{Pd}\,\norm{a}\;=\;\lvert\ip{a}{d}\rvert\;=\;\sum_i \lvert d_i\rvert\,\lvert a_i\rvert\;\ge\;\Bigl(\min_{a_i\ne 0}\lvert a_i\rvert\Bigr)\norm{d}_1\;\ge\;\Bigl(\min_{a_i\ne 0}\lvert a_i\rvert\Bigr)\norm{d}_2 ,
+\]
+so that
+\[
+\cos\alpha\;\ge\;\frac{\min_{a_i\ne 0}\lvert a_i\rvert}{\norm{a}_2}.
+\]
+\end{remark}
+
+\begin{thebibliography}{9}
+\bibitem{GVL} G.~H. Golub and C.~F. Van Loan, \emph{Matrix Computations}, 4th ed., Johns Hopkins University Press, 2013.
+\bibitem{Rock} R.~T. Rockafellar, \emph{Convex Analysis}, Princeton University Press, 1970.
+\end{thebibliography}
+
+\end{document}

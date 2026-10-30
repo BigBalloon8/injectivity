@@ -188,8 +188,8 @@ def run(config: RunConfig, logger=None):
     
     
 def main():
-    n_runs = 1
-    seeds = (torch.arange(n_runs) + 889).tolist()
+    n_runs = 3
+    seeds = (torch.arange(n_runs) + 10).tolist()
     
     for gamma in [1]:
         run_metrics = {}

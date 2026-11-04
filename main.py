@@ -200,9 +200,8 @@ def main():
                                 "p": 17,
                                 "op": "add"
                             },
-                    low_collapse_init=True,
                     seed = 0,
-                    n_layers=2,
+                    n_layers=1,
                     mbs=2**13,
                     num_epochs=2**13,
                     log_freq=256

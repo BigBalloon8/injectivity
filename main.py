@@ -195,9 +195,10 @@ def main():
     for gamma in [1]:
         run_metrics = {}
         config = RunConfig(
-                    task = "kv_seq",
+                    task = "modular",
                     task_kwargs= {
-                                "n_keys": 2**14
+                                "p": 17,
+                                "op": "add"
                             },
                     low_collapse_init=True,
                     seed = 0,
